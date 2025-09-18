@@ -5,6 +5,9 @@ import { ProductsTabs } from "@/components/products-tabs";
 import { Suspense } from "react";
 import { LazyLoader } from "@/components/ui/lazy-loader";
 
+// Force dynamic rendering
+export const dynamic = 'force-dynamic';
+
 export default async function ProductsPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

@@ -3,6 +3,9 @@ import { redirect } from "next/navigation";
 import { MotorVehiclesNav } from "@/components/motor-vehicles-nav";
 import { MotorVehiclesTabs } from "@/components/motor-vehicles/motor-vehicles-tabs";
 
+// Force dynamic rendering
+export const dynamic = 'force-dynamic';
+
 export default async function MotorVehiclesPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

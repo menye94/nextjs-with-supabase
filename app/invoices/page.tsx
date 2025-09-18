@@ -6,6 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { FileText, Plus } from "lucide-react";
 
+// Force dynamic rendering
+export const dynamic = 'force-dynamic';
+
 export default async function InvoicesPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

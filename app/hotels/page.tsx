@@ -3,6 +3,9 @@ import { redirect } from "next/navigation";
 import { HotelsNav } from "@/components/hotels-nav";
 import { HotelsTabs } from "@/components/hotels-tabs";
 
+// Force dynamic rendering
+export const dynamic = 'force-dynamic';
+
 export default async function HotelsPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

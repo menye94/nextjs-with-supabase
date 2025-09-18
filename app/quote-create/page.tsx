@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -122,7 +122,8 @@ const STEPS = [
   { id: 'review', title: 'Review & Confirm', description: 'Final review and confirmation' },
 ];
 
-export default function QuoteCreatePage() {
+// Component that uses useSearchParams - needs to be wrapped in Suspense
+function QuoteCreateContent() {
   const [currentStep, setCurrentStep] = useState(0);
   const [quoteData, setQuoteData] = useState<QuoteData>({
     clientName: '',
@@ -782,5 +783,21 @@ export default function QuoteCreatePage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// Main export with Suspense boundary
+export default function QuoteCreatePage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading quote creator...</p>
+        </div>
+      </div>
+    }>
+      <QuoteCreateContent />
+    </Suspense>
   );
 }
