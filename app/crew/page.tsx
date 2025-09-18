@@ -3,6 +3,9 @@ import { redirect } from "next/navigation";
 import { CrewNav } from "@/components/crew-nav";
 import { CrewTabs } from "@/components/crew-tabs";
 
+// Force dynamic rendering
+export const dynamic = 'force-dynamic';
+
 export default async function CrewPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

@@ -3,6 +3,9 @@ import { redirect } from "next/navigation";
 import { ClientsTabs } from "@/components/clients-tabs";
 import { ClientsNav } from "@/components/clients-nav";
 
+// Force dynamic rendering
+export const dynamic = 'force-dynamic';
+
 export default async function ClientsPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

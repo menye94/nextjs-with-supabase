@@ -1,6 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { approveCompany } from "@/lib/actions/auth";
 
+// Force dynamic rendering
+export const dynamic = 'force-dynamic';
+
 export default async function ApprovalsPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

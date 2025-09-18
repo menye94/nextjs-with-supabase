@@ -4,6 +4,9 @@ import { DashboardNav } from "@/components/dashboard-nav";
 import { DashboardSidebar } from "@/components/dashboard-sidebar";
 import { CompanyForm } from "@/components/company-form";
 
+// Force dynamic rendering
+export const dynamic = 'force-dynamic';
+
 export default async function CompanyPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

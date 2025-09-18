@@ -1,5 +1,8 @@
 import EquipmentTabs from '@/components/equipment/equipment-tabs';
 
+// Force dynamic rendering
+export const dynamic = 'force-dynamic';
+
 export default function EquipmentPage() {
   return (
     <div className="container mx-auto py-8 px-4 bg-white min-h-screen">

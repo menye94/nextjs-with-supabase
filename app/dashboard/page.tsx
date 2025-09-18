@@ -5,6 +5,9 @@ import { DashboardSidebar } from "@/components/dashboard-sidebar";
 import { RecentInvoices } from "@/components/recent-invoices";
 import { WelcomeCard } from "@/components/welcome-card";
 
+// Force dynamic rendering
+export const dynamic = 'force-dynamic';
+
 export default async function DashboardPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
