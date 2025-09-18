@@ -3,6 +3,9 @@ import { redirect } from "next/navigation";
 import { TransportNav } from "@/components/transport-nav";
 import { TransportTabs } from "@/components/transport-tabs";
 
+// Force dynamic rendering
+export const dynamic = 'force-dynamic';
+
 export default async function TransportPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
