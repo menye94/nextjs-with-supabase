@@ -1,0 +1,391 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom Branding Theme */
+:root {
+  --black: #000000;
+  --gray: #abb8c3;
+  --gray2: #8c9194;
+  --white: #ffffff;
+  --pink: #f78da7;
+  --red: #cf2e2e;
+  --orange: #ff6900;
+  --amber: #fcb900;
+  --cyan: #7bdcb5;
+  --theme-green: #00d084;
+  --theme-green-dark: #00ac6d;
+  --cyan-blue: #8ed1fc;
+  --theme-blue: #0693e3;
+  --purple: #9b51e0;
+  --bg-fade: #f7f7f7;
+}
+
+/* Custom Utility Classes */
+.text-gray {
+  color: var(--gray);
+}
+
+.text-gray2 {
+  color: var(--gray2);
+}
+
+.btn-pri {
+  background: var(--theme-green);
+  border-radius: 5px;
+  color: var(--white);
+  padding: 5px;
+  border: none;
+}
+
+.btn-pri:hover {
+  background: var(--theme-green-dark);
+  border-radius: 3px;
+  color: var(--white);
+}
+
+.bg-fade {
+  background: var(--bg-fade) !important;
+}
+
+.btn-bordered {
+  border-radius: 5px;
+  border: 1px solid var(--gray);
+  padding: 5px;
+  background: none;
+}
+
+.btn-bordered:hover {
+  border-radius: 5px;
+  outline: 2px solid var(--cyan-blue);
+}
+
+.text-white {
+  color: var(--white) !important;
+}
+
+.theme-text {
+  color: var(--theme-green);
+}
+
+.text-blue {
+  color: var(--theme-blue);
+}
+
+.loginForm {
+  position: relative;
+  top: 70px;
+}
+
+.disText {
+  font-size: 1.5rem !important;
+}
+
+.in-selection {
+  color: var(--theme-green) !important;
+  text-decoration: underline !important;
+}
+
+.slc {
+  text-decoration: none;
+  color: #202020;
+}
+
+.parksTable td {
+  border-color: var(--gray2) !important;
+}
+
+.SearchDiv {
+  padding: 4px;
+  border: 1px solid var(--gray);
+  border-radius: 5px;
+}
+
+.SearchDiv input {
+  border: none;
+  outline: none;
+}
+
+.SearchDiv input:focus {
+  outline: none;
+}
+
+.SearchDiv input:focus ~ .SearchDiv {
+  border-color: var(--cyan-blue);
+  border-width: 2px;
+}
+
+.small-text {
+  font-size: 12px !important;
+}
+
+.img-bg {
+  min-height: 30vh;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  background-repeat: no-repeat;
+  background-size: cover;
+  backface-visibility: initial;
+}
+
+.onlineIndicator {
+  padding: 0px;
+  padding-left: 3px;
+  padding-right: 3px;
+  border: 1px solid var(--gray);
+  border-radius: 10px;
+  padding-bottom: 5px;
+}
+
+.onlineIndicator span {
+  margin-top: 15px;
+}
+
+.img-wraper {
+  margin-top: -9%;
+  background: #ffffff;
+  border-radius: 50%;
+  width: 200px;
+}
+
+.theme-bg {
+  background: var(--theme-green);
+}
+
+.pro-img img {
+  width: 100%;
+  height: auto;
+  border-radius: 50%;
+}
+
+.text-fade {
+  color: #b9b9b9;
+}
+
+.arrow {
+  font-size: 12px;
+}
+
+.userName h1 {
+  font-size: 2.1rem;
+}
+
+.grid-2 {
+  grid-template-columns: 1fr 1fr;
+}
+
+.grid-3 {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+.imgPreview {
+  width: 75px;
+}
+
+.imgPreview img {
+  width: 100%;
+  border-radius: 50%;
+}
+
+.imgUpload {
+  min-height: 10vh;
+  padding: 20px;
+  border: 1px solid #e2e2e2;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: all 200ms ease-in-out;
+}
+
+.imgUpload .upIcon {
+  border: 1px solid #d1d0d0;
+  border-radius: 5px;
+}
+
+.imgUpload2 {
+  width: 100%;
+  min-height: 10vh;
+  padding: 20px;
+  border: 1px solid #e2e2e2;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: all 200ms ease-in-out;
+}
+
+.imgUpload2 .upIcon {
+  border: 1px solid #d1d0d0;
+  border-radius: 5px;
+}
+
+.h-b-pri:hover {
+  border: 2px solid var(--theme-green);
+}
+
+/* Custom select */
+.custom-select-container {
+  position: relative;
+  display: inline-block;
+  width: 200px;
+}
+
+.custom-select {
+  display: flex;
+  align-items: center;
+  padding: 5px;
+  border: 1px solid #e0e0e0;
+  border-radius: 5px;
+  cursor: pointer;
+  background-color: #ffffff;
+}
+
+.custom-select img {
+  margin-right: 10px;
+}
+
+.custom-options {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  display: none;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  background-color: #ffffff;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.custom-options div {
+  padding: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+}
+
+.custom-options div:hover {
+  background-color: #f8f9fa;
+}
+
+.custom-options img {
+  margin-right: 10px;
+}
+
+/* Custom select dropdown styles for time zone selection */
+.timezone-select-container {
+  position: relative;
+  display: inline-block;
+  width: 250px;
+}
+
+.timezone-select {
+  display: flex;
+  align-items: center;
+  padding: 5px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  cursor: pointer;
+  background-color: #ffffff;
+}
+
+.timezone-select .icon {
+  margin-right: 10px;
+}
+
+.timezone-options {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  display: none;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  background-color: #ffffff;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.timezone-options div {
+  padding: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+}
+
+.timezone-options div:hover {
+  background-color: #f8f9fa;
+}
+
+.timezone-options .icon {
+  margin-right: 10px;
+}
+
+#flexSwitchCheckChecked:checked::before {
+  background-color: var(--theme-green) !important;
+  border-color: var(--theme-green) !important;
+}
+
+@media only screen and (max-width: 720px) {
+  .img-wraper {
+    margin-top: -10%;
+    background: #ffffff;
+    border-radius: 50%;
+    width: 70px !important;
+  }
+
+  .pro-img img {
+    width: 100%;
+    height: auto;
+    border-radius: 50%;
+  }
+}
+
+@layer utilities {
+  .scrollbar-hide {
+    /* For Webkit-based browsers (Chrome, Safari and Opera) */
+    &::-webkit-scrollbar {
+      display: none;
+      -webkit-appearance: none;
+    }
+
+    /* For IE, Edge and Firefox */
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
+  }
+
+  .transition-inherit-all {
+    transition-property: inherit;
+    transition-duration: inherit;
+    transition-timing-function: inherit;
+  }
+}
+
+html,
+body {
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-font-variant-ligatures: contextual;
+  font-variant-ligatures: contextual;
+  -webkit-font-kerning: normal;
+  font-kerning: normal;
+}
+
+/* Hide the default expand arrow on Safari.  */
+details summary::-webkit-details-marker {
+  display: none;
+}
+
+/* Hide default arrows from number inputs. */
+/* Chrome, Safari, Edge, Opera */
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+/* Firefox */
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+/* Hide the default clear button (X) from search inputs. */
+input[type="search"]::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+}

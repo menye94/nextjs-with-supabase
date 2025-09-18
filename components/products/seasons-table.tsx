@@ -1,429 +1,449 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { DataTable } from "@/components/ui/data-table";
-import { Badge } from "@/components/ui/badge";
-import { Modal } from "@/components/ui/modal";
-import { MoreHorizontal } from "lucide-react";
-
-interface SeasonsTableProps {
-  searchQuery: string;
-  onSearchChange?: (query: string) => void;
-}
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { ChevronDown, ChevronUp, ChevronRight, X } from "lucide-react";
 
 interface Season {
   id: number;
   season_name: string;
-  start_date: string | null;
-  end_date: string | null;
-  is_deleted: string | null;
+  start_date: string;
+  end_date: string;
 }
 
-export function SeasonsTable({ searchQuery, onSearchChange }: SeasonsTableProps) {
+interface GroupedSeason {
+  season_name: string;
+  seasons: Season[];
+  isExpanded: boolean;
+}
+
+export function SeasonsTable({ searchQuery = '', onSearchChange }: { searchQuery?: string; onSearchChange: (query: string) => void }) {
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSeason, setEditingSeason] = useState<Season | null>(null);
-  const [openMenuId, setOpenMenuId] = useState<number | null>(null);
-  const [seasonName, setSeasonName] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const [formLoading, setFormLoading] = useState(false);
-  const [formError, setFormError] = useState("");
-  const menuRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [formData, setFormData] = useState({
+    season_name: "",
+    start_date: "",
+    end_date: "",
+  });
   const supabase = createClient();
 
   useEffect(() => {
     fetchSeasons();
   }, []);
 
-  // Close menus when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (openMenuId !== null) {
-        const menuRef = menuRefs.current[openMenuId];
-        if (menuRef && !menuRef.contains(event.target as Node)) {
-          setOpenMenuId(null);
-        }
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [openMenuId]);
-
   const fetchSeasons = async () => {
     try {
+      setLoading(true);
       const { data, error } = await supabase
-        .from('seasons')
-        .select('*')
-        .order('season_name');
+        .from("seasons")
+        .select("*")
+        .order("season_name");
 
-      if (error) {
-        console.error('Error fetching seasons:', error);
-        return;
-      }
-
+      if (error) throw error;
       setSeasons(data || []);
     } catch (error) {
-      console.error('Error fetching seasons:', error);
+      console.error("Error fetching seasons:", error);
     } finally {
       setLoading(false);
     }
   };
 
-  const formatDate = (dateString: string | null) => {
-    if (!dateString) return 'Not set';
-    return new Date(dateString).toLocaleDateString();
+  const filteredSeasons = seasons.filter((season) =>
+    season.season_name.toLowerCase().includes((searchQuery || '').toLowerCase())
+  );
+
+  // Group seasons by season name
+  const groupedSeasons = useMemo(() => {
+    const groups: { [key: string]: Season[] } = {};
+    
+    filteredSeasons.forEach(season => {
+      if (!groups[season.season_name]) {
+        groups[season.season_name] = [];
+      }
+      groups[season.season_name].push(season);
+    });
+
+    return Object.entries(groups).map(([season_name, seasons]) => ({
+      season_name,
+      seasons,
+      isExpanded: expandedGroups.has(season_name)
+    }));
+  }, [filteredSeasons, expandedGroups]);
+
+  const toggleGroup = (seasonName: string) => {
+    const newExpanded = new Set(expandedGroups);
+    if (newExpanded.has(seasonName)) {
+      newExpanded.delete(seasonName);
+    } else {
+      newExpanded.add(seasonName);
+    }
+    setExpandedGroups(newExpanded);
   };
 
-  const columns = [
-    {
-      key: 'season_name',
-      label: 'Season Name',
-      sortable: true,
-      render: (value: string) => (
-        <span className="font-medium">
-          {value.split(' ').map(word => 
-            word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
-          ).join(' ')}
-        </span>
-      ),
-    },
-    {
-      key: 'start_date',
-      label: 'Start Date',
-      sortable: true,
-      render: (value: string | null) => (
-        <span className="text-gray-700">{formatDate(value)}</span>
-      ),
-    },
-    {
-      key: 'end_date',
-      label: 'End Date',
-      sortable: true,
-      render: (value: string | null) => (
-        <span className="text-gray-700">{formatDate(value)}</span>
-      ),
-    },
-    {
-      key: 'actions',
-      label: 'Actions',
-      sortable: false,
-      render: (value: any, row: Season) => (
-        <div className="relative flex justify-center" ref={(el) => menuRefs.current[row.id] = el}>
-          <button
-            onClick={() => setOpenMenuId(openMenuId === row.id ? null : row.id)}
-            className="p-2 hover:bg-gray-100 rounded-md transition-colors"
-          >
-            <MoreHorizontal className="h-4 w-4 text-gray-600" />
-          </button>
-          
-          {openMenuId === row.id && (
-            <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-md shadow-lg z-50">
-              <div className="py-1">
-                <button
-                  onClick={() => handleEdit(row)}
-                  className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
-                >
-                  Edit
-                </button>
-                <div className="border-t border-gray-100 my-1"></div>
-                <button
-                  onClick={() => handleDelete(row)}
-                  className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-gray-50"
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      ),
-    },
-  ];
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      if (editingSeason) {
+        const { error } = await supabase
+          .from("seasons")
+          .update(formData)
+          .eq("id", editingSeason.id);
 
-  const handleAddNew = () => {
-    setEditingSeason(null);
-    setSeasonName("");
-    setStartDate("");
-    setEndDate("");
-    setFormError("");
-    setIsModalOpen(true);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("seasons")
+          .insert([formData]);
+
+        if (error) throw error;
+      }
+
+      setIsModalOpen(false);
+      setEditingSeason(null);
+      setFormData({
+        season_name: "",
+        start_date: "",
+        end_date: "",
+      });
+      fetchSeasons();
+    } catch (error) {
+      console.error("Error saving season:", error);
+    }
   };
 
   const handleEdit = (season: Season) => {
     setEditingSeason(season);
-    setSeasonName(season.season_name);
-    setStartDate(season.start_date ? season.start_date.split('T')[0] : "");
-    setEndDate(season.end_date ? season.end_date.split('T')[0] : "");
-    setFormError("");
+    setFormData({
+      season_name: season.season_name,
+      start_date: season.start_date ? new Date(season.start_date).toISOString().split('T')[0] : "",
+      end_date: season.end_date ? new Date(season.end_date).toISOString().split('T')[0] : "",
+    });
     setIsModalOpen(true);
-    setOpenMenuId(null);
   };
 
-  const handleDelete = async (season: Season) => {
-    if (window.confirm(`Are you sure you want to delete "${season.season_name}"? This action cannot be undone.`)) {
+  const handleDelete = async (id: number) => {
+    if (confirm("Are you sure you want to delete this season?")) {
       try {
-        // Use hard delete until database is updated with is_deleted column
         const { error } = await supabase
-          .from('seasons')
+          .from("seasons")
           .delete()
-          .eq('id', season.id);
+          .eq("id", id);
 
-        if (error) {
-          console.error('Error deleting season:', error);
-          return;
-        }
-
-        fetchSeasons(); // Refresh the data
-        setOpenMenuId(null);
+        if (error) throw error;
+        fetchSeasons();
       } catch (error) {
-        console.error('Error deleting season:', error);
+        console.error("Error deleting season:", error);
       }
     }
   };
 
-  const handleAddSuccess = () => {
-    fetchSeasons(); // Refresh the data
-  };
-
-  const handleCloseModal = () => {
-    setIsModalOpen(false);
-    setEditingSeason(null);
-    setSeasonName("");
-    setStartDate("");
-    setEndDate("");
-    setFormError("");
-  };
-
-  const handleSubmit = async () => {
-    if (!seasonName.trim()) {
-      setFormError("Season name is required");
-      return;
-    }
-
-    if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
-      setFormError("Start date cannot be after end date");
-      return;
-    }
-
-    setFormLoading(true);
-    setFormError("");
+  const handleBulkAction = async (action: string, selectedIds: string[]) => {
+    if (selectedIds.length === 0) return;
 
     try {
-      const seasonData = {
-        season_name: seasonName.trim(),
-        start_date: startDate || null,
-        end_date: endDate || null,
-      };
+      if (action === "delete") {
+        if (confirm(`Are you sure you want to delete ${selectedIds.length} seasons?`)) {
+          const { error } = await supabase
+            .from("seasons")
+            .delete()
+            .in("id", selectedIds);
 
-      if (editingSeason) {
-        // Check for duplicates when editing (excluding current season)
-        const { data: existingSeasons, error: checkError } = await supabase
-          .from('seasons')
-          .select('id')
-          .eq('season_name', seasonName.trim())
-          .neq('id', editingSeason.id);
-
-        if (checkError) {
-          console.error('Error checking for duplicates:', checkError);
-          setFormError('Error checking for duplicates');
-          return;
-        }
-
-        if (existingSeasons && existingSeasons.length > 0) {
-          setFormError("A season with this name already exists");
-          return;
-        }
-
-        // Update existing season
-        const { error } = await supabase
-          .from('seasons')
-          .update(seasonData)
-          .eq('id', editingSeason.id);
-
-        if (error) {
-          console.error('Error updating season:', error);
-          setFormError(error.message);
-          return;
-        }
-      } else {
-        // Check for duplicates when creating new season
-        const { data: existingSeasons, error: checkError } = await supabase
-          .from('seasons')
-          .select('id')
-          .eq('season_name', seasonName.trim());
-
-        if (checkError) {
-          console.error('Error checking for duplicates:', checkError);
-          setFormError('Error checking for duplicates');
-          return;
-        }
-
-        if (existingSeasons && existingSeasons.length > 0) {
-          setFormError("A season with this name already exists");
-          return;
-        }
-
-        // Create new season
-        const { error } = await supabase
-          .from('seasons')
-          .insert(seasonData);
-
-        if (error) {
-          console.error('Error creating season:', error);
-          setFormError(error.message);
-          return;
+          if (error) throw error;
         }
       }
 
-      handleAddSuccess();
-      handleCloseModal();
+      fetchSeasons();
     } catch (error) {
-      console.error('Error saving season:', error);
-      setFormError('An unexpected error occurred');
-    } finally {
-      setFormLoading(false);
+      console.error("Error performing bulk action:", error);
     }
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex items-center justify-center p-8">
         <div className="text-gray-500">Loading seasons...</div>
       </div>
     );
   }
 
   return (
-    <>
-      {/* Search and Filter Bar */}
-      <div className="mb-6 bg-white rounded-lg border border-gray-200 p-4">
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="px-6 py-4 border-b border-gray-200">
         <div className="flex items-center justify-between">
-          {/* Search Bar */}
-          <div className="flex-1 max-w-md">
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-              </div>
-              <input
-                type="text"
-                placeholder="Search for seasons..."
-                value={searchQuery}
-                onChange={(e) => {
-                  if (onSearchChange) {
-                    onSearchChange(e.target.value);
-                  }
-                }}
-                className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[var(--theme-green)] focus:border-[var(--theme-green)] sm:text-sm"
-              />
-            </div>
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Seasons</h2>
+            <p className="text-sm text-gray-500">Manage hotel seasons grouped by season name</p>
           </div>
-
-          {/* Filter Controls */}
-          <div className="flex items-center space-x-3">
-            {/* Filters Button */}
-            <button className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-[var(--theme-green)] focus:border-[var(--theme-green)]">
-              <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-              Filters
-            </button>
+          <div className="flex space-x-3">
+            <Button 
+              onClick={() => setIsModalOpen(true)}
+              className="bg-[var(--theme-green)] hover:bg-[var(--theme-green-dark)]"
+              size="sm"
+            >
+              Add Season
+            </Button>
           </div>
         </div>
       </div>
 
-      <DataTable
-        columns={columns}
-        data={seasons}
-        searchQuery={searchQuery}
-        title="Seasons"
-        description="Manage seasons for park products and pricing"
-        onAddNew={handleAddNew}
-        searchFields={['season_name']}
-      />
+      {/* Search */}
+      <div className="px-6">
+        <Input
+          type="text"
+          placeholder="Search seasons..."
+          value={searchQuery}
+          onChange={(e) => onSearchChange(e.target.value)}
+          className="max-w-sm"
+        />
+      </div>
 
-      <Modal
-        isOpen={isModalOpen}
-        onClose={handleCloseModal}
-        title={editingSeason ? "Edit Season" : "Add New Season"}
-      >
-        <div className="space-y-6">
-          {/* Form Fields */}
-          <div className="space-y-4">
-            <div>
-              <label htmlFor="seasonName" className="block text-sm font-medium text-gray-700 mb-2">
+      {/* Grouped Table */}
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Season Name
-              </label>
-              <input
-                id="seasonName"
-                type="text"
-                value={seasonName}
-                onChange={(e) => setSeasonName(e.target.value)}
-                placeholder="Enter season name"
-                className="block w-full px-3 py-2 border border-gray-300 rounded-md leading-5 bg-white text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[var(--theme-green)] focus:border-[var(--theme-green)] sm:text-sm"
-              />
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Start Date
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                End Date
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Actions
+              </th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {groupedSeasons.map((group) => (
+              <React.Fragment key={`group-${group.season_name}`}>
+                {/* Group Header Row */}
+                <tr className="bg-gray-50 hover:bg-gray-100">
+                  <td className="px-6 py-4">
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() => toggleGroup(group.season_name)}
+                        className="flex items-center space-x-2 text-sm font-medium text-gray-900 hover:text-gray-700"
+                      >
+                        {group.isExpanded ? (
+                          <ChevronDown className="h-4 w-4" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4" />
+                        )}
+                        <span>{group.season_name}</span>
+                        <span className="text-gray-500">({group.seasons.length})</span>
+                      </button>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-500">
+                    {group.seasons.length > 0 && new Date(group.seasons[0].start_date).toLocaleDateString()}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-500">
+                    {group.seasons.length > 0 && new Date(group.seasons[0].end_date).toLocaleDateString()}
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex space-x-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setFormData({
+                            season_name: group.season_name,
+                            start_date: "",
+                            end_date: "",
+                          });
+                          setEditingSeason(null);
+                          setIsModalOpen(true);
+                        }}
+                      >
+                        Add to Group
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+                
+                {/* Nested Rows */}
+                {group.isExpanded && group.seasons.map((season) => (
+                  <tr key={season.id} className="bg-white hover:bg-gray-50">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center space-x-2">
+                        <div className="w-4"></div> {/* Indent */}
+                        <span className="text-sm text-gray-900">{season.season_name}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-900">
+                      {new Date(season.start_date).toLocaleDateString()}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-900">
+                      {new Date(season.end_date).toLocaleDateString()}
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex space-x-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleEdit(season)}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => handleDelete(season.id)}
+                        >
+                          Delete
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </React.Fragment>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Empty State */}
+      {groupedSeasons.length === 0 && (
+        <div className="text-center py-12">
+          <div className="text-gray-500">No seasons found</div>
+          <Button
+            onClick={() => setIsModalOpen(true)}
+            className="mt-4 bg-[var(--theme-green)] hover:bg-[var(--theme-green-dark)]"
+          >
+            Add First Season
+          </Button>
+        </div>
+      )}
+
+      {/* Tailwind CSS Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          {/* Backdrop */}
+          <div 
+            className="fixed inset-0 bg-black bg-opacity-50 transition-all duration-300 ease-in-out backdrop-blur-sm"
+            onClick={() => {
+              setIsModalOpen(false);
+              setEditingSeason(null);
+              setFormData({
+                season_name: "",
+                start_date: "",
+                end_date: "",
+              });
+            }}
+          ></div>
+          
+          {/* Modal */}
+          <div className="flex min-h-full items-center justify-center p-4 text-center">
+            <div className="relative transform overflow-hidden rounded-2xl bg-white text-left align-middle shadow-2xl transition-all w-full max-w-md border border-gray-100">
+              {/* Header */}
+              <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-white">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  {editingSeason ? "Edit Season" : "Add Season"}
+                </h3>
+                <button
+                  onClick={() => {
+                    setIsModalOpen(false);
+                    setEditingSeason(null);
+                    setFormData({
+                      season_name: "",
+                      start_date: "",
+                      end_date: "",
+                    });
+                  }}
+                  className="rounded-full p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-[var(--theme-green)] focus:ring-offset-2 transition-all duration-200"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              
+              {/* Body */}
+              <div className="p-6 space-y-6">
+                {/* Form Fields */}
+                <div className="space-y-4">
+                  <div>
+                    <label htmlFor="season_name" className="block text-sm font-medium text-gray-700 mb-2">
+                      Season Name
+                    </label>
+                    <input
+                      id="season_name"
+                      type="text"
+                      value={formData.season_name}
+                      onChange={(e) => setFormData({ ...formData, season_name: e.target.value })}
+                      placeholder="Enter season name"
+                      required
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-[var(--theme-green)] focus:border-[var(--theme-green)] transition-all duration-200 hover:border-gray-400"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label htmlFor="start_date" className="block text-sm font-medium text-gray-700 mb-2">
+                      Start Date
+                    </label>
+                    <input
+                      id="start_date"
+                      type="date"
+                      value={formData.start_date}
+                      onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
+                      required
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-[var(--theme-green)] focus:border-[var(--theme-green)] transition-all duration-200 hover:border-gray-400"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label htmlFor="end_date" className="block text-sm font-medium text-gray-700 mb-2">
+                      End Date
+                    </label>
+                    <input
+                      id="end_date"
+                      type="date"
+                      value={formData.end_date}
+                      onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
+                      required
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-[var(--theme-green)] focus:border-[var(--theme-green)] transition-all duration-200 hover:border-gray-400"
+                    />
+                  </div>
+                </div>
+
+                {/* Footer */}
+                <div className="flex justify-end gap-3 pt-6 border-t border-gray-200">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsModalOpen(false);
+                      setEditingSeason(null);
+                      setFormData({
+                        season_name: "",
+                        start_date: "",
+                        end_date: "",
+                      });
+                    }}
+                    className="px-6 py-3 border border-gray-300 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--theme-green)] transition-all duration-200"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    onClick={handleSubmit}
+                    className="px-6 py-3 bg-[var(--theme-green)] text-white rounded-xl text-sm font-medium hover:bg-[var(--theme-green-dark)] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--theme-green)] transition-all duration-200 shadow-lg hover:shadow-xl"
+                  >
+                    {editingSeason ? "Update" : "Add"}
+                  </button>
+                </div>
+              </div>
             </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="startDate" className="block text-sm font-medium text-gray-700 mb-2">
-                  Start Date
-                </label>
-                <input
-                  id="startDate"
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-md leading-5 bg-white text-gray-900 focus:outline-none focus:ring-1 focus:ring-[var(--theme-green)] focus:border-[var(--theme-green)] sm:text-sm"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="endDate" className="block text-sm font-medium text-gray-700 mb-2">
-                  End Date
-                </label>
-                <input
-                  id="endDate"
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-md leading-5 bg-white text-gray-900 focus:outline-none focus:ring-1 focus:ring-[var(--theme-green)] focus:border-[var(--theme-green)] sm:text-sm"
-                />
-              </div>
-            </div>
-            
-            {/* Error Message */}
-            {formError && (
-              <div className="text-red-600 text-sm">
-                {formError}
-              </div>
-            )}
-          </div>
-
-          {/* Action Buttons */}
-          <div className="flex justify-end space-x-3">
-            <button
-              onClick={handleCloseModal}
-              disabled={formLoading}
-              className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSubmit}
-              disabled={formLoading}
-              className="px-4 py-2 bg-green-600 text-white rounded-md text-sm font-medium hover:bg-green-700 disabled:opacity-50"
-            >
-              {formLoading ? (editingSeason ? "Updating..." : "Adding...") : (editingSeason ? "Update" : "Add")}
-            </button>
           </div>
         </div>
-      </Modal>
-    </>
+      )}
+    </div>
   );
 } 

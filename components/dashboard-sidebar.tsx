@@ -8,7 +8,11 @@ import {
   Package,
   FileText,
   Settings,
-  ChevronRight
+  ChevronRight,
+  Calculator,
+  Car,
+  Users,
+  Gift // Added for Offers Testing
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -29,9 +33,39 @@ const navigation = [
     icon: Package,
   },
   {
+    name: "Motor Vehicles",
+    href: "/motor-vehicles",
+    icon: Car,
+  },
+  {
+    name: "Crew",
+    href: "/crew",
+    icon: Users,
+  },
+  {
     name: "Invoices",
     href: "/invoices",
     icon: FileText,
+  },
+  {
+    name: "Quotes",
+    href: "/quotes",
+    icon: FileText,
+  },
+  {
+    name: "Create Quote",
+    href: "/quote-create",
+    icon: Calculator,
+  },
+  {
+    name: "Test Quote",
+    href: "/test-quote",
+    icon: Calculator,
+  },
+  {
+    name: "Offers Testing",
+    href: "/offers-test",
+    icon: Gift,
   },
   {
     name: "Settings",

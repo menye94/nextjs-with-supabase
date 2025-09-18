@@ -20,6 +20,202 @@
   --bg-fade: #f7f7f7;
 }
 
+/* Fix for dropdown visibility */
+.hotel-dropdown,
+.hotel-filter-dropdown {
+  background-color: #ffffff !important;
+  color: #111827 !important;
+  border: 1px solid #d1d5db !important;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important;
+}
+
+.hotel-dropdown input,
+.hotel-filter-dropdown input {
+  color: #111827 !important;
+  background-color: #ffffff !important;
+  border: 1px solid #d1d5db !important;
+  border-radius: 0.375rem !important;
+}
+
+.hotel-dropdown input::placeholder,
+.hotel-filter-dropdown input::placeholder {
+  color: #6b7280 !important;
+}
+
+.hotel-dropdown input:focus,
+.hotel-filter-dropdown input:focus {
+  outline: none !important;
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+}
+
+.hotel-dropdown button,
+.hotel-filter-dropdown button {
+  color: #374151 !important;
+  background-color: transparent !important;
+  border: none !important;
+  width: 100% !important;
+  text-align: left !important;
+  padding: 0.5rem 1rem !important;
+  font-size: 0.875rem !important;
+  line-height: 1.25rem !important;
+}
+
+.hotel-dropdown button:hover,
+.hotel-filter-dropdown button:hover {
+  background-color: #f3f4f6 !important;
+  color: #111827 !important;
+}
+
+.hotel-dropdown button:focus,
+.hotel-filter-dropdown button:focus {
+  outline: none !important;
+  background-color: #e5e7eb !important;
+}
+
+/* Fix for selected hotel display in input fields */
+input[readonly] {
+  color: #111827 !important;
+  background-color: #ffffff !important;
+  cursor: pointer !important;
+}
+
+input[readonly]:focus {
+  outline: none !important;
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+}
+
+/* Fix for main search input visibility */
+input[type="text"],
+input[type="search"] {
+  color: #111827 !important;
+  background-color: #ffffff !important;
+  border: 1px solid #d1d5db !important;
+}
+
+input[type="text"]::placeholder,
+input[type="search"]::placeholder {
+  color: #6b7280 !important;
+}
+
+/* Fix for modal labels visibility */
+.modal label,
+label[for] {
+  color: #374151 !important;
+  font-weight: 500 !important;
+  font-size: 0.875rem !important;
+  line-height: 1.25rem !important;
+  margin-bottom: 0.5rem !important;
+  display: block !important;
+}
+
+/* Ensure form labels in modals are visible */
+form label,
+.modal form label {
+  color: #374151 !important;
+  font-weight: 500 !important;
+  font-size: 0.875rem !important;
+  line-height: 1.25rem !important;
+  margin-bottom: 0.5rem !important;
+  display: block !important;
+}
+
+/* Fix for Label component visibility */
+label {
+  color: #374151 !important;
+  font-weight: 500 !important;
+  font-size: 0.875rem !important;
+  line-height: 1.25rem !important;
+  margin-bottom: 0.5rem !important;
+  display: block !important;
+}
+
+/* Fix for modal button text visibility */
+.modal button,
+.modal .button,
+button[type="button"],
+button[type="submit"] {
+  color: #111827 !important;
+  background-color: #ffffff !important;
+  border: 1px solid #d1d5db !important;
+  font-weight: 500 !important;
+  font-size: 0.875rem !important;
+}
+
+/* Fix for outline button text visibility */
+button[type="button"][variant="outline"],
+.button[variant="outline"],
+button.outline {
+  color: #374151 !important;
+  background-color: #ffffff !important;
+  border: 1px solid #d1d5db !important;
+  font-weight: 500 !important;
+}
+
+/* Fix for outline button hover state */
+button[type="button"][variant="outline"]:hover,
+.button[variant="outline"]:hover,
+button.outline:hover {
+  color: #111827 !important;
+  background-color: #f9fafb !important;
+  border-color: #9ca3af !important;
+}
+
+/* Fix for primary button text visibility */
+button[type="submit"],
+.button[type="submit"],
+button.primary {
+  color: #ffffff !important;
+  background-color: #059669 !important;
+  border: 1px solid #059669 !important;
+  font-weight: 500 !important;
+}
+
+/* Fix for primary button hover state */
+button[type="submit"]:hover,
+.button[type="submit"]:hover,
+button.primary:hover {
+  background-color: #047857 !important;
+  border-color: #047857 !important;
+}
+
+input[type="text"]:focus,
+input[type="search"]:focus {
+  outline: none !important;
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+}
+
+/* Ensure all input elements have proper visibility */
+.Input,
+input {
+  color: #111827 !important;
+  background-color: #ffffff !important;
+}
+
+.Input::placeholder,
+input::placeholder {
+  color: #6b7280 !important;
+}
+
+/* Fix for bulk action buttons visibility */
+.bulk-action-button {
+  color: #374151 !important;
+  background-color: #ffffff !important;
+  border-color: #d1d5db !important;
+}
+
+.bulk-action-button:hover {
+  background-color: #f9fafb !important;
+  color: #111827 !important;
+}
+
+.bulk-action-button:disabled {
+  color: #9ca3af !important;
+  background-color: #f3f4f6 !important;
+}
+
 .text-gray {
   color: var(--gray);
 }
@@ -390,4 +586,16 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* Hide calendar picker indicator for date inputs */
+.date-input-no-icon::-webkit-calendar-picker-indicator {
+  display: none !important;
+  appearance: none !important;
+}
+
+.date-input-no-icon {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
 }

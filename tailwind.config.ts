@@ -51,6 +51,22 @@ export default {
           "4": "hsl(var(--chart-4))",
           "5": "hsl(var(--chart-5))",
         },
+        // Custom branding colors
+        theme: {
+          green: "var(--theme-green)",
+          "green-dark": "var(--theme-green-dark)",
+          blue: "var(--theme-blue)",
+          gray: "var(--gray)",
+          gray2: "var(--gray2)",
+          cyan: "var(--cyan)",
+          "cyan-blue": "var(--cyan-blue)",
+          pink: "var(--pink)",
+          red: "var(--red)",
+          orange: "var(--orange)",
+          amber: "var(--amber)",
+          purple: "var(--purple)",
+          "bg-fade": "var(--bg-fade)",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",

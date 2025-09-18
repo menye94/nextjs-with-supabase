@@ -115,4 +115,18 @@ INSERT INTO tax_behaviour (name) VALUES
   ('Tax Exempt'),
   ('VAT Included'),
   ('Service Charge Included')
-ON CONFLICT DO NOTHING; 
+ON CONFLICT DO NOTHING;
+
+-- Insert sample hotel categories
+INSERT INTO hotel_category (name) VALUES
+  ('Luxury'),
+  ('Business'),
+  ('Budget'),
+  ('Boutique'),
+  ('Resort'),
+  ('Spa'),
+  ('Casino'),
+  ('Airport'),
+  ('Extended Stay'),
+  ('All-Inclusive')
+ON CONFLICT (name) DO NOTHING; 

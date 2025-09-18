@@ -4,7 +4,8 @@ import { useState, useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { DataTable } from "@/components/ui/data-table";
 import { Modal } from "@/components/ui/modal";
-import { MoreHorizontal, ChevronDown, Check, Search } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { MoreHorizontal, ChevronDown, Check, Search, Plus, Download, Filter } from "lucide-react";
 
 interface ParkPricingTableProps {
   searchQuery: string;
@@ -13,8 +14,10 @@ interface ParkPricingTableProps {
 
 interface ParkPricing {
   id: number;
+  product_name: string;
   park_name: string;
   entry_type: string;
+  age_group: string;
   category_name?: string;
   price: number;
   season_name: string;
@@ -36,10 +39,7 @@ interface EntryType {
   entry_name: string;
 }
 
-interface Season {
-  id: number;
-  season_name: string;
-}
+
 
 interface Currency {
   id: number;
@@ -58,6 +58,22 @@ interface PricingType {
   pricing_type_name: string;
 }
 
+interface Season {
+  id: number;
+  season_name: string;
+  start_date: string;
+  end_date: string;
+}
+
+interface ParkProduct {
+  id: number;
+  national_park_id: number;
+  entry_type_id: number;
+  park_category_id?: number;
+  age_group: number;
+  pricing_type_id: number;
+}
+
 export function ParkPricingTable({ searchQuery, onSearchChange }: ParkPricingTableProps) {
   const [pricing, setPricing] = useState<ParkPricing[]>([]);
   const [loading, setLoading] = useState(true);
@@ -66,16 +82,23 @@ export function ParkPricingTable({ searchQuery, onSearchChange }: ParkPricingTab
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
   const [formLoading, setFormLoading] = useState(false);
   const [formError, setFormError] = useState("");
+  const [loadingProgress, setLoadingProgress] = useState({ current: 0, total: 0 });
   const menuRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
+
+  // Filter states
+  const [filterPark, setFilterPark] = useState<string>("");
+  const [filterEntryType, setFilterEntryType] = useState<string>("");
+  const [filterCategory, setFilterCategory] = useState<string>("");
+  const [showFilters, setShowFilters] = useState(false);
 
   // Form states
   const [selectedParkIds, setSelectedParkIds] = useState<string[]>([]); // Changed to array for multiple parks
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>("");
-  const [selectedEntryTypeId, setSelectedEntryTypeId] = useState<string>("");
-  const [selectedSeasonId, setSelectedSeasonId] = useState<string>("");
+  const [selectedEntryTypeIds, setSelectedEntryTypeIds] = useState<string[]>([]); // Changed to array for multiple entry types
   const [selectedCurrencyId, setSelectedCurrencyId] = useState<string>("");
-  const [selectedAgeGroupId, setSelectedAgeGroupId] = useState<string>("4"); // Default to Adult (18-64)
+  const [selectedAgeGroupIds, setSelectedAgeGroupIds] = useState<string[]>([]); // Changed to array for multiple age groups
   const [selectedPricingTypeId, setSelectedPricingTypeId] = useState<string>("1"); // Default to "Per Person"
+  const [selectedSeasonId, setSelectedSeasonId] = useState<string>("");
   const [price, setPrice] = useState<string>("");
   const [taxBehavior, setTaxBehavior] = useState<string>("exclusive");
 
@@ -83,30 +106,33 @@ export function ParkPricingTable({ searchQuery, onSearchChange }: ParkPricingTab
   const [parks, setParks] = useState<NationalPark[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [entryTypes, setEntryTypes] = useState<EntryType[]>([]);
-  const [seasons, setSeasons] = useState<Season[]>([]);
+
   const [currencies, setCurrencies] = useState<Currency[]>([]);
-     const [ageGroups, setAgeGroups] = useState<AgeGroup[]>([]);
-   const [pricingTypes, setPricingTypes] = useState<PricingType[]>([]);
-   const [existingProducts, setExistingProducts] = useState<{ [key: string]: boolean }>({});
-   const [exactDuplicates, setExactDuplicates] = useState<{ [key: string]: boolean }>({});
+  const [ageGroups, setAgeGroups] = useState<AgeGroup[]>([]);
+  const [pricingTypes, setPricingTypes] = useState<PricingType[]>([]);
+  const [seasons, setSeasons] = useState<Season[]>([]);
+  const [existingProducts, setExistingProducts] = useState<{ [key: string]: boolean }>({});
+  const [exactDuplicates, setExactDuplicates] = useState<{ [key: string]: boolean }>({});
 
   // Dropdown states
   const [parkDropdownOpen, setParkDropdownOpen] = useState(false);
   const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
   const [entryTypeDropdownOpen, setEntryTypeDropdownOpen] = useState(false);
-  const [seasonDropdownOpen, setSeasonDropdownOpen] = useState(false);
+
   const [currencyDropdownOpen, setCurrencyDropdownOpen] = useState(false);
   const [ageGroupDropdownOpen, setAgeGroupDropdownOpen] = useState(false);
   const [pricingTypeDropdownOpen, setPricingTypeDropdownOpen] = useState(false);
+  const [seasonDropdownOpen, setSeasonDropdownOpen] = useState(false);
 
   // Search states
   const [parkSearchQuery, setParkSearchQuery] = useState("");
   const [categorySearchQuery, setCategorySearchQuery] = useState("");
   const [entryTypeSearchQuery, setEntryTypeSearchQuery] = useState("");
-  const [seasonSearchQuery, setSeasonSearchQuery] = useState("");
+
   const [currencySearchQuery, setCurrencySearchQuery] = useState("");
   const [ageGroupSearchQuery, setAgeGroupSearchQuery] = useState("");
   const [pricingTypeSearchQuery, setPricingTypeSearchQuery] = useState("");
+  const [seasonSearchQuery, setSeasonSearchQuery] = useState("");
 
   const supabase = createClient();
 
@@ -134,14 +160,14 @@ export function ParkPricingTable({ searchQuery, onSearchChange }: ParkPricingTab
          // Update existing products when relevant form fields change
      useEffect(() => {
        const updateExistingProducts = async () => {
-         if (selectedEntryTypeId && selectedAgeGroupId && selectedPricingTypeId && parks.length > 0) {
+         if (selectedEntryTypeIds.length > 0 && selectedAgeGroupIds.length > 0 && selectedPricingTypeId && selectedSeasonId && parks.length > 0) {
            const existing = await getExistingProducts();
            setExistingProducts(existing);
          }
        };
 
        const updateExactDuplicates = async () => {
-         if (selectedEntryTypeId && selectedAgeGroupId && selectedPricingTypeId && selectedSeasonId && taxBehavior && parks.length > 0) {
+         if (selectedEntryTypeIds.length > 0 && selectedAgeGroupIds.length > 0 && selectedPricingTypeId && selectedSeasonId && taxBehavior && parks.length > 0) {
            const exact = await getExactDuplicates();
            setExactDuplicates(exact);
          }
@@ -149,12 +175,12 @@ export function ParkPricingTable({ searchQuery, onSearchChange }: ParkPricingTab
 
        updateExistingProducts();
        updateExactDuplicates();
-     }, [selectedEntryTypeId, selectedCategoryId, selectedAgeGroupId, selectedPricingTypeId, selectedSeasonId, taxBehavior, parks]);
+            }, [selectedEntryTypeIds, selectedCategoryId, selectedAgeGroupIds, selectedPricingTypeId, selectedSeasonId, taxBehavior, parks]);
 
      // Debug: Log when age group selection changes
      useEffect(() => {
-       console.log('Age group selection changed to:', selectedAgeGroupId);
-     }, [selectedAgeGroupId]);
+       console.log('Age group selection changed to:', selectedAgeGroupIds);
+     }, [selectedAgeGroupIds]);
 
      // Debug: Log when pricing type selection changes
      useEffect(() => {
@@ -178,37 +204,104 @@ export function ParkPricingTable({ searchQuery, onSearchChange }: ParkPricingTab
 
   const fetchParkPricing = async () => {
     try {
-      const { data, error } = await supabase
+      // First try to use the new readable view for better data structure
+      let { data, error } = await supabase
+        .from('park_product_readable')
+        .select(`
+          id,
+          abbreviated_name,
+          full_park_name,
+          full_entry_type,
+          full_age_group,
+          category,
+          pricing_type
+        `);
+      
+      // If the view doesn't exist or fails, fall back to the original approach
+      if (error || !data || data.length === 0) {
+        console.log('Falling back to original park_product table fetch');
+        
+        // Fetch from the original park_product table
+        const { data: productData, error: productError } = await supabase
+          .from('park_product')
+          .select(`
+            id,
+            product_name,
+            national_park:national_parks(national_park_name),
+            entry_type:entry_type(entry_name),
+            age_group:age_group(age_group_name),
+            park_category:park_category(category_name),
+            pricing_type:pricing_type(pricing_type_name)
+          `);
+        
+        if (productError) {
+          console.error('Error fetching product data:', productError);
+          return;
+        }
+        
+        // Transform the fallback data
+        data = (productData || []).map((item: any) => ({
+          id: item.id,
+          abbreviated_name: item.product_name, // Use existing product_name as fallback
+          full_park_name: item.national_park?.national_park_name || 'Unknown Park',
+          full_entry_type: item.entry_type?.entry_name || 'Unknown Entry Type',
+          full_age_group: item.age_group?.age_group_name || 'Unknown Age Group',
+          category: item.park_category?.category_name || 'No Category',
+          pricing_type: item.pricing_type?.pricing_type_name || 'Unknown Pricing Type'
+        }));
+      }
+      
+      // Also fetch pricing data separately
+      const { data: pricingData, error: pricingError } = await supabase
         .from('park_product_price')
         .select(`
           id,
           unit_amount,
-          park_product:park_product(
-            product_name,
-            national_park:national_parks(national_park_name),
-            entry_type:entry_type(entry_name),
-            park_category:park_category(category_name)
-          ),
+          park_product_id,
           season:seasons(season_name),
           currency:currency(currency_name)
         `);
-
-      if (error) {
-        console.error('Error fetching park pricing:', error);
+      
+      if (pricingError) {
+        console.error('Error fetching pricing data:', pricingError);
         return;
       }
 
       // Transform the data to match our interface
-      const transformedData = (data || []).map((item: any) => ({
-        id: item.id,
-        park_name: item.park_product?.national_park?.national_park_name || 'Unknown Park',
-        entry_type: item.park_product?.entry_type?.entry_name || 'Unknown Type',
-        category_name: item.park_product?.park_category?.category_name || 'No Category',
-        price: item.unit_amount,
-        season_name: item.season?.season_name || 'Unknown Season',
-        currency_name: item.currency?.currency_name || 'USD',
-      }));
+      const transformedData = (data || []).map((item: any) => {
+        // Find corresponding pricing data
+        const pricing = pricingData?.find((p: any) => p.park_product_id === item.id);
+        
+        // Generate abbreviated name if the original is too long
+        let productName = item.abbreviated_name;
+        if (!productName || productName.length > 20) {
+          productName = generateAbbreviatedName(
+            item.full_park_name || 'Unknown Park',
+            item.full_entry_type || 'Unknown Entry Type',
+            item.full_age_group || 'Unknown Age Group',
+            item.category
+          );
+        }
+        
+        return {
+          id: item.id,
+          product_name: productName,
+          park_name: item.full_park_name,
+          entry_type: item.full_entry_type,
+          age_group: item.full_age_group,
+          category_name: item.category || 'No Category',
+          price: pricing?.unit_amount || 0,
+          season_name: (pricing?.season as any)?.season_name || 'Unknown Season',
+          currency_name: (pricing?.currency as any)?.currency_name || 'USD',
+        };
+      });
 
+      console.log('Transformed pricing data:', transformedData.slice(0, 3));
+      console.log('Sample product names:', transformedData.slice(0, 3).map(item => ({
+        id: item.id,
+        product_name: item.product_name,
+        length: item.product_name?.length
+      })));
       setPricing(transformedData);
     } catch (error) {
       console.error('Error fetching park pricing:', error);
@@ -259,7 +352,7 @@ export function ParkPricingTable({ searchQuery, onSearchChange }: ParkPricingTab
       // Fetch seasons
       const { data: seasonsData, error: seasonsError } = await supabase
         .from('seasons')
-        .select('id, season_name')
+        .select('id, season_name, start_date, end_date')
         .order('season_name');
       
       if (seasonsError) {
@@ -322,7 +415,7 @@ export function ParkPricingTable({ searchQuery, onSearchChange }: ParkPricingTab
 
        // Function to check for existing products based on current form selections
     const getExistingProducts = async () => {
-      if (!selectedEntryTypeId || !selectedAgeGroupId || !selectedPricingTypeId) {
+      if (selectedEntryTypeIds.length === 0 || selectedAgeGroupIds.length === 0 || selectedPricingTypeId === undefined) {
         return {};
       }
 
@@ -333,12 +426,12 @@ export function ParkPricingTable({ searchQuery, onSearchChange }: ParkPricingTab
           .from('park_product')
           .select('id')
           .eq('national_park_id', park.id)
-          .eq('entry_type_id', selectedEntryTypeId)
+          .in('entry_type_id', selectedEntryTypeIds)
           .eq('park_category_id', selectedCategoryId || null)
-          .eq('age_group', selectedAgeGroupId)
+          .in('age_group', selectedAgeGroupIds)
           .eq('pricing_type_id', selectedPricingTypeId);
 
-        existingProducts[park.id.toString()] = existingProduct && existingProduct.length > 0;
+        existingProducts[park.id.toString()] = (existingProduct && existingProduct.length > 0) || false;
       }
 
       return existingProducts;
@@ -346,7 +439,7 @@ export function ParkPricingTable({ searchQuery, onSearchChange }: ParkPricingTab
 
     // Function to check for exact duplicates (including tax behavior)
     const getExactDuplicates = async () => {
-      if (!selectedEntryTypeId || !selectedAgeGroupId || !selectedPricingTypeId || !selectedSeasonId || !taxBehavior) {
+      if (selectedEntryTypeIds.length === 0 || selectedAgeGroupIds.length === 0 || selectedPricingTypeId === undefined || taxBehavior === undefined) {
         return {};
       }
 
@@ -359,9 +452,9 @@ export function ParkPricingTable({ searchQuery, onSearchChange }: ParkPricingTab
           .from('park_product')
           .select('id')
           .eq('national_park_id', park.id)
-          .eq('entry_type_id', selectedEntryTypeId)
+          .in('entry_type_id', selectedEntryTypeIds)
           .eq('park_category_id', selectedCategoryId || null)
-          .eq('age_group', selectedAgeGroupId)
+          .in('age_group', selectedAgeGroupIds)
           .eq('pricing_type_id', selectedPricingTypeId);
 
         if (existingProduct && existingProduct.length > 0) {
@@ -373,7 +466,7 @@ export function ParkPricingTable({ searchQuery, onSearchChange }: ParkPricingTab
             .eq('season_id', selectedSeasonId)
             .eq('tax_behavior', taxBehaviorId);
 
-          exactDuplicates[park.id.toString()] = existingPricing && existingPricing.length > 0;
+          exactDuplicates[park.id.toString()] = (existingPricing && existingPricing.length > 0) || false;
         } else {
           exactDuplicates[park.id.toString()] = false;
         }
@@ -381,13 +474,98 @@ export function ParkPricingTable({ searchQuery, onSearchChange }: ParkPricingTab
 
       return exactDuplicates;
     };
-  const getSelectedEntryType = () => entryTypes.find(type => type.id.toString() === selectedEntryTypeId);
-  const getSelectedSeason = () => seasons.find(season => season.id.toString() === selectedSeasonId);
+  const getSelectedEntryType = () => entryTypes.find(type => type.id.toString() === selectedEntryTypeIds[0]);
+
   const getSelectedCurrency = () => currencies.find(currency => currency.id.toString() === selectedCurrencyId);
-  const getSelectedAgeGroup = () => ageGroups.find(ageGroup => ageGroup.id.toString() === selectedAgeGroupId);
+  const getSelectedAgeGroup = () => ageGroups.find(ageGroup => ageGroup.id.toString() === selectedAgeGroupIds[0]);
   const getSelectedPricingType = () => pricingTypes.find(pricingType => pricingType.id.toString() === selectedPricingTypeId);
+  const getSelectedSeason = () => seasons.find(season => season.id.toString() === selectedSeasonId);
+
+  // Filter the pricing data based on selected filters
+  const getFilteredPricing = () => {
+    let filtered = pricing;
+
+    if (filterPark) {
+      filtered = filtered.filter(item => 
+        item.park_name.toLowerCase().includes(filterPark.toLowerCase())
+      );
+    }
+
+    if (filterEntryType) {
+      filtered = filtered.filter(item => 
+        item.entry_type.toLowerCase().includes(filterEntryType.toLowerCase())
+      );
+    }
+
+    if (filterCategory) {
+      filtered = filtered.filter(item => 
+        item.category_name?.toLowerCase().includes(filterCategory.toLowerCase())
+      );
+    }
+
+    return filtered;
+  };
+
+  // Clear all filters
+  const clearFilters = () => {
+    setFilterPark("");
+    setFilterEntryType("");
+    setFilterCategory("");
+  };
+
+  // Check if any filters are active
+  const hasActiveFilters = filterPark || filterEntryType || filterCategory;
+
+  // Function to generate abbreviated product names on the fly
+  const generateAbbreviatedName = (parkName: string, entryType: string, ageGroup: string, category?: string) => {
+    // Extract first 3-4 letters from park name
+    const parkAbbr = parkName.split(' ').map(word => word.charAt(0).toUpperCase()).join('').substring(0, 3);
+    
+    // Extract first 2-3 letters from entry type
+    const entryAbbr = entryType.split(' ').map(word => word.charAt(0).toUpperCase()).join('').substring(0, 2);
+    
+    // Extract age group abbreviation
+    let ageAbbr = '16+';
+    if (ageGroup.toLowerCase().includes('5') && ageGroup.toLowerCase().includes('15')) {
+      ageAbbr = '5-15';
+    } else if (ageGroup.toLowerCase().includes('below') || ageGroup.toLowerCase().includes('5')) {
+      ageAbbr = '0-4';
+    } else if (ageGroup.toLowerCase().includes('student')) {
+      ageAbbr = 'STU';
+    } else if (ageGroup.toLowerCase().includes('senior')) {
+      ageAbbr = 'SEN';
+    }
+    
+    // Extract category abbreviation if exists
+    const categoryAbbr = category ? category.split(' ').map(word => word.charAt(0).toUpperCase()).join('').substring(0, 2) : '';
+    
+    return categoryAbbr ? `${parkAbbr}-${entryAbbr}-${categoryAbbr}-${ageAbbr}` : `${parkAbbr}-${entryAbbr}-${ageAbbr}`;
+  };
 
   const columns = [
+    {
+      key: 'product_name',
+      label: 'Product Code',
+      sortable: true,
+      render: (value: string, row: ParkPricing) => (
+        <div className="group relative">
+          <span className="font-mono font-bold text-sm bg-gray-100 px-2 py-1 rounded border max-w-[120px] truncate block">
+            {value}
+          </span>
+          {/* Tooltip with full description */}
+          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-800 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10 max-w-xs">
+            <div className="text-center">
+              <div className="font-semibold mb-1">Full Description</div>
+              <div className="break-words">{row.park_name}</div>
+              <div className="break-words">{row.entry_type}</div>
+              <div className="break-words">{row.age_group}</div>
+              <div className="break-words">{row.category_name}</div>
+            </div>
+            <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>
+          </div>
+        </div>
+      ),
+    },
     {
       key: 'park_name',
       label: 'Park Name',
@@ -409,6 +587,16 @@ export function ParkPricingTable({ searchQuery, onSearchChange }: ParkPricingTab
           {value.split(' ').map(word => 
             word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
           ).join(' ')}
+        </span>
+      ),
+    },
+    {
+      key: 'age_group',
+      label: 'Age Group',
+      sortable: true,
+      render: (value: string) => (
+        <span className="text-sm text-gray-600">
+          {value}
         </span>
       ),
     },
@@ -451,7 +639,11 @@ export function ParkPricingTable({ searchQuery, onSearchChange }: ParkPricingTab
       label: 'Actions',
       sortable: false,
       render: (value: any, row: ParkPricing) => (
-        <div className="relative flex justify-center" ref={(el) => menuRefs.current[row.id] = el}>
+        <div className="relative flex justify-center" ref={(el) => {
+          if (el) {
+            menuRefs.current[row.id] = el;
+          }
+        }}>
           <button
             onClick={() => setOpenMenuId(openMenuId === row.id ? null : row.id)}
             className="p-2 hover:bg-gray-100 rounded-md transition-colors"
@@ -487,10 +679,10 @@ export function ParkPricingTable({ searchQuery, onSearchChange }: ParkPricingTab
     setEditingPricing(null);
     setSelectedParkIds([]); // Reset to empty array
     setSelectedCategoryId("");
-    setSelectedEntryTypeId("");
+    setSelectedEntryTypeIds([]);
     setSelectedSeasonId("");
     setSelectedCurrencyId("");
-    setSelectedAgeGroupId("4"); // Default to Adult
+    setSelectedAgeGroupIds([]); // Reset to empty array
     setSelectedPricingTypeId("1"); // Default to "Per Person"
     setPrice("");
     setTaxBehavior("exclusive");
@@ -547,20 +739,21 @@ export function ParkPricingTable({ searchQuery, onSearchChange }: ParkPricingTab
           setSelectedCurrencyId(pricingData.currency_id.toString());
 
                   if (pricingData.park_product) {
-            setSelectedParkIds([pricingData.park_product.national_park_id.toString()]); // Single park for editing
-            setSelectedEntryTypeId(pricingData.park_product.entry_type_id.toString());
-            setSelectedCategoryId(pricingData.park_product.park_category_id?.toString() || '');
+            const parkProduct = Array.isArray(pricingData.park_product) ? pricingData.park_product[0] : pricingData.park_product;
+            setSelectedParkIds([parkProduct.national_park_id.toString()]); // Single park for editing
+            setSelectedEntryTypeIds([parkProduct.entry_type_id.toString()]);
+            setSelectedCategoryId(parkProduct.park_category_id?.toString() || '');
             
             // Debug: Log age group and pricing type data
-            console.log('Age group from DB:', pricingData.park_product.age_group);
-            console.log('Pricing type from DB:', pricingData.park_product.pricing_type_id);
+            console.log('Age group from DB:', parkProduct.age_group);
+            console.log('Pricing type from DB:', parkProduct.pricing_type_id);
             
-            setSelectedAgeGroupId(pricingData.park_product.age_group?.toString() || '4');
-            setSelectedPricingTypeId(pricingData.park_product.pricing_type_id?.toString() || '1');
+            setSelectedAgeGroupIds([parkProduct.age_group?.toString() || '4']);
+            setSelectedPricingTypeId(parkProduct.pricing_type_id?.toString() || '1');
             
             // Debug: Log the set values
-            console.log('Set age group ID to:', pricingData.park_product.age_group?.toString() || '4');
-            console.log('Set pricing type ID to:', pricingData.park_product.pricing_type_id?.toString() || '1');
+            console.log('Set age group ID to:', parkProduct.age_group?.toString() || '4');
+            console.log('Set pricing type ID to:', parkProduct.pricing_type_id?.toString() || '1');
           }
        }
     } catch (error) {
@@ -591,14 +784,19 @@ export function ParkPricingTable({ searchQuery, onSearchChange }: ParkPricingTab
   };
 
   const handleCloseModal = () => {
+    // Prevent closing if form is loading
+    if (formLoading) {
+      return;
+    }
+    
     setIsModalOpen(false);
     setEditingPricing(null);
     setSelectedParkIds([]);
     setSelectedCategoryId("");
-    setSelectedEntryTypeId("");
+    setSelectedEntryTypeIds([]);
     setSelectedSeasonId("");
     setSelectedCurrencyId("");
-    setSelectedAgeGroupId("4");
+    setSelectedAgeGroupIds([]);
     setSelectedPricingTypeId("1");
     setPrice("");
     setTaxBehavior("exclusive");
@@ -611,10 +809,29 @@ export function ParkPricingTable({ searchQuery, onSearchChange }: ParkPricingTab
     setCurrencyDropdownOpen(false);
     setAgeGroupDropdownOpen(false);
     setPricingTypeDropdownOpen(false);
+    
+    // Reset loading progress
+    setLoadingProgress({ current: 0, total: 0 });
   };
 
+  // Reset filters when new data is fetched
+  useEffect(() => {
+    if (!loading && pricing.length > 0) {
+      // Only reset filters if they don't match any data
+      if (filterPark && !pricing.some(item => item.park_name.toLowerCase().includes(filterPark.toLowerCase()))) {
+        setFilterPark("");
+      }
+      if (filterEntryType && !pricing.some(item => item.entry_type.toLowerCase().includes(filterEntryType.toLowerCase()))) {
+        setFilterEntryType("");
+      }
+      if (filterCategory && !pricing.some(item => item.category_name?.toLowerCase().includes(filterCategory.toLowerCase()))) {
+        setFilterCategory("");
+      }
+    }
+  }, [pricing, loading, filterPark, filterEntryType, filterCategory]);
+
          const handleSubmit = async () => {
-          if (selectedParkIds.length === 0 || !selectedEntryTypeId || !selectedSeasonId || !selectedCurrencyId || !selectedAgeGroupId || !selectedPricingTypeId || !price) {
+          if (selectedParkIds.length === 0 || selectedEntryTypeIds.length === 0 || !selectedSeasonId || !selectedCurrencyId || selectedAgeGroupIds.length === 0 || selectedPricingTypeId === undefined || !price) {
         setFormError("All fields are required");
         return;
       }
@@ -627,6 +844,10 @@ export function ParkPricingTable({ searchQuery, onSearchChange }: ParkPricingTab
 
      setFormLoading(true);
      setFormError("");
+     
+     // Calculate total records to be created
+     const totalRecords = selectedParkIds.length * selectedEntryTypeIds.length * selectedAgeGroupIds.length;
+     setLoadingProgress({ current: 0, total: totalRecords });
 
           try {
                  // First, check for existing products and pricing to avoid duplicates
@@ -636,48 +857,59 @@ export function ParkPricingTable({ searchQuery, onSearchChange }: ParkPricingTab
            const selectedPark = parks.find(p => p.id.toString() === parkId);
            const parkName = selectedPark?.national_park_name || 'Unknown Park';
            
-           // Check if a park product already exists for this combination
-           const { data: existingProduct, error: productCheckError } = await supabase
-             .from('park_product')
-             .select('id')
-             .eq('national_park_id', parkId)
-             .eq('entry_type_id', selectedEntryTypeId)
-             .eq('park_category_id', selectedCategoryId || null)
-             .eq('age_group', selectedAgeGroupId)
-             .eq('pricing_type_id', selectedPricingTypeId);
+           // Check each combination of entry type and age group for this park
+           let hasAnyProduct = false;
+           let hasAnyExactMatch = false;
+           
+           for (const entryTypeId of selectedEntryTypeIds) {
+             for (const ageGroupId of selectedAgeGroupIds) {
+               // Check if a park product already exists for this specific combination
+               const { data: existingProduct, error: productCheckError } = await supabase
+                 .from('park_product')
+                 .select('id')
+                 .eq('national_park_id', parkId)
+                 .eq('entry_type_id', entryTypeId)
+                 .eq('park_category_id', selectedCategoryId || null)
+                 .eq('age_group', ageGroupId)
+                 .eq('pricing_type_id', selectedPricingTypeId);
 
-           if (productCheckError) {
-             console.error('Error checking existing product:', productCheckError);
-             setFormError('Error checking existing product');
-             return;
-           }
+               if (productCheckError) {
+                 console.error('Error checking existing product:', productCheckError);
+                 setFormError('Error checking existing product');
+                 return;
+               }
 
-           const hasProduct = existingProduct && existingProduct.length > 0;
-           let hasPricing = false;
-           let hasExactMatch = false;
+               const hasProduct = existingProduct && existingProduct.length > 0;
+               if (hasProduct) hasAnyProduct = true;
+               
+               let hasPricing = false;
+               let hasExactMatch = false;
 
-           if (hasProduct) {
-             // Check if pricing already exists for this product, season, and tax behavior
-             const taxBehaviorId = taxBehavior === 'exclusive' ? 2 : 1;
-             
-             const { data: existingPricing, error: pricingCheckError } = await supabase
-               .from('park_product_price')
-               .select('id')
-               .eq('park_product_id', existingProduct[0].id)
-               .eq('season_id', selectedSeasonId)
-               .eq('tax_behavior', taxBehaviorId);
+               if (hasProduct) {
+                 // Check if pricing already exists for this product, season, and tax behavior
+                 const taxBehaviorId = taxBehavior === 'exclusive' ? 2 : 1;
+                 
+                 const { data: existingPricing, error: pricingCheckError } = await supabase
+                   .from('park_product_price')
+                   .select('id')
+                   .eq('park_product_id', existingProduct[0].id)
+                   .eq('season_id', selectedSeasonId)
+                   .eq('tax_behavior', taxBehaviorId);
 
-             if (pricingCheckError) {
-               console.error('Error checking existing pricing:', pricingCheckError);
-               setFormError('Error checking existing pricing');
-               return;
+                 if (pricingCheckError) {
+                   console.error('Error checking existing pricing:', pricingCheckError);
+                   setFormError('Error checking existing pricing');
+                   return;
+                 }
+
+                 hasPricing = existingPricing && existingPricing.length > 0;
+                 hasExactMatch = hasPricing; // Exact match means same park, entry type, age group, category, season, and tax behavior
+                 if (hasExactMatch) hasAnyExactMatch = true;
+               }
              }
-
-             hasPricing = existingPricing && existingPricing.length > 0;
-             hasExactMatch = hasPricing; // Exact match means same park, entry type, age group, category, season, and tax behavior
            }
 
-           duplicateChecks.push({ parkName, hasProduct, hasPricing, hasExactMatch });
+           duplicateChecks.push({ parkName, hasProduct: hasAnyProduct, hasPricing: false, hasExactMatch: hasAnyExactMatch });
          }
 
          // Check for exact duplicates (same park, entry type, age group, category, season, and tax behavior)
@@ -691,58 +923,70 @@ export function ParkPricingTable({ searchQuery, onSearchChange }: ParkPricingTab
            return;
          }
 
-        // Handle multiple parks - create products for each selected park
+        // Handle multiple parks, entry types, and age groups - create products for each combination
         const productIds: number[] = [];
+        let currentProgress = 0;
         
         for (const parkId of selectedParkIds) {
           const selectedPark = parks.find(p => p.id.toString() === parkId);
           
-          // Check if a park product already exists for this combination
-          const { data: existingProduct, error: productCheckError } = await supabase
-            .from('park_product')
-            .select('id')
-            .eq('national_park_id', parkId)
-            .eq('entry_type_id', selectedEntryTypeId)
-            .eq('park_category_id', selectedCategoryId || null)
-            .eq('age_group', selectedAgeGroupId)
-            .eq('pricing_type_id', selectedPricingTypeId);
+          for (const entryTypeId of selectedEntryTypeIds) {
+            for (const ageGroupId of selectedAgeGroupIds) {
+              // Check if a park product already exists for this specific combination
+              const { data: existingProduct, error: productCheckError } = await supabase
+                .from('park_product')
+                .select('id')
+                .eq('national_park_id', parkId)
+                .eq('entry_type_id', entryTypeId)
+                .eq('park_category_id', selectedCategoryId || null)
+                .eq('age_group', ageGroupId)
+                .eq('pricing_type_id', selectedPricingTypeId);
 
-          if (productCheckError) {
-            console.error('Error checking existing product:', productCheckError);
-            setFormError('Error checking existing product');
-            return;
-          }
+              if (productCheckError) {
+                console.error('Error checking existing product:', productCheckError);
+                setFormError('Error checking existing product');
+                return;
+              }
 
-          let productId: number;
+              let productId: number;
 
-          if (existingProduct && existingProduct.length > 0) {
-            // Use existing product
-            productId = existingProduct[0].id;
-          } else {
-            // Create new park product
-            const { data: newProduct, error: createProductError } = await supabase
-              .from('park_product')
-              .insert({
-                national_park_id: parseInt(parkId),
-                entry_type_id: parseInt(selectedEntryTypeId),
-                park_category_id: selectedCategoryId ? parseInt(selectedCategoryId) : null,
-                age_group: parseInt(selectedAgeGroupId),
-                pricing_type_id: parseInt(selectedPricingTypeId),
-                product_name: `${selectedPark?.national_park_name} - ${getSelectedEntryType()?.entry_name}${selectedCategoryId ? ` - ${getSelectedCategory()?.category_name}` : ''} - ${getSelectedAgeGroup()?.age_group_name} - ${getSelectedPricingType()?.pricing_type_name}`
-              })
-              .select('id')
-              .single();
+              if (existingProduct && existingProduct.length > 0) {
+                // Use existing product
+                productId = existingProduct[0].id;
+              } else {
+                // Create new park product for this specific combination
+                const entryType = entryTypes.find(et => et.id.toString() === entryTypeId);
+                const ageGroup = ageGroups.find(ag => ag.id.toString() === ageGroupId);
+                
+                const { data: newProduct, error: createProductError } = await supabase
+                  .from('park_product')
+                  .insert({
+                    national_park_id: parseInt(parkId),
+                    entry_type_id: parseInt(entryTypeId),
+                    park_category_id: selectedCategoryId ? parseInt(selectedCategoryId) : null,
+                    age_group: parseInt(ageGroupId),
+                    pricing_type_id: parseInt(selectedPricingTypeId),
+                    product_name: `${selectedPark?.national_park_name} - ${entryType?.entry_name}${selectedCategoryId ? ` - ${getSelectedCategory()?.category_name}` : ''} - ${ageGroup?.age_group_name} - ${getSelectedPricingType()?.pricing_type_name}`
+                  })
+                  .select('id')
+                  .single();
 
-            if (createProductError) {
-              console.error('Error creating park product:', createProductError);
-              setFormError('Error creating park product');
-              return;
+                if (createProductError) {
+                  console.error('Error creating park product:', createProductError);
+                  setFormError('Error creating park product');
+                  return;
+                }
+
+                productId = newProduct.id;
+              }
+              
+              productIds.push(productId);
+              
+              // Update progress
+              currentProgress++;
+              setLoadingProgress({ current: currentProgress, total: totalRecords });
             }
-
-            productId = newProduct.id;
           }
-          
-          productIds.push(productId);
         }
 
              // Handle pricing creation for multiple products
@@ -792,7 +1036,14 @@ export function ParkPricingTable({ searchQuery, onSearchChange }: ParkPricingTab
       await fetchParkPricing();
       
       // Close modal and show success
+      const totalRecordsCreated = productIds.length;
+      console.log(`Successfully created ${totalRecordsCreated} pricing records`);
+      
       handleCloseModal();
+      fetchParkPricing(); // Refresh the table data
+      
+      // Show success message
+      alert(`Successfully created ${totalRecordsCreated} pricing records for ${selectedParkIds.length} park(s) × ${selectedEntryTypeIds.length} entry type(s) × ${selectedAgeGroupIds.length} age group(s)`);
     } catch (error) {
       console.error('Error saving pricing:', error);
       setFormError('An unexpected error occurred');
@@ -812,8 +1063,8 @@ export function ParkPricingTable({ searchQuery, onSearchChange }: ParkPricingTab
         items: any[],
         searchField: string,
         displayField: string,
-        existingProducts?: { [key: string]: boolean } = {},
-        exactDuplicates?: { [key: string]: boolean } = {}
+        existingProducts?: { [key: string]: boolean },
+        exactDuplicates?: { [key: string]: boolean }
       ) => {
      const filteredItems = searchQuery 
        ? items.filter(item => 
@@ -875,12 +1126,12 @@ export function ParkPricingTable({ searchQuery, onSearchChange }: ParkPricingTab
                       >
                                                  <div className="flex items-center">
                            <span className="truncate">{item[displayField]}</span>
-                           {exactDuplicates[item.id.toString()] && (
+                           {exactDuplicates?.[item.id.toString()] && (
                              <span className="ml-2 px-2 py-1 text-xs bg-red-100 text-red-800 rounded-full">
                                Exact Duplicate
                              </span>
                            )}
-                           {existingProducts[item.id.toString()] && !exactDuplicates[item.id.toString()] && (
+                           {existingProducts?.[item.id.toString()] && !exactDuplicates?.[item.id.toString()] && (
                              <span className="ml-2 px-2 py-1 text-xs bg-yellow-100 text-yellow-800 rounded-full">
                                Existing Product
                              </span>
@@ -1023,60 +1274,201 @@ export function ParkPricingTable({ searchQuery, onSearchChange }: ParkPricingTab
 
   return (
     <>
-      {/* Search and Filter Bar */}
-      <div className="mb-6 bg-white rounded-lg border border-gray-200 p-4">
+      {/* Header Section with Action Buttons */}
+      <div className="bg-white rounded-lg border border-gray-200 p-6">
         <div className="flex items-center justify-between">
-          {/* Search Bar */}
-          <div className="flex-1 max-w-md">
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-              </div>
-              <input
-                type="text"
-                placeholder="Search for pricing..."
-                value={searchQuery}
-                onChange={(e) => {
-                  if (onSearchChange) {
-                    onSearchChange(e.target.value);
-                  }
-                }}
-                className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[var(--theme-green)] focus:border-[var(--theme-green)] sm:text-sm"
-              />
-            </div>
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Park Pricing</h2>
+            <p className="text-sm text-gray-500 mt-1">Manage pricing for park products and services</p>
           </div>
-
-          {/* Filter Controls */}
           <div className="flex items-center space-x-3">
-            {/* Filters Button */}
-            <button className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-[var(--theme-green)] focus:border-[var(--theme-green)]">
-              <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-              Filters
-            </button>
+            <Button onClick={handleAddNew} className="bg-[var(--theme-green)] hover:bg-[var(--theme-green-dark)] text-white">
+              <Plus className="h-4 w-4 mr-2" />
+              Add New Park Pricing
+            </Button>
+            <Button variant="outline" size="sm" className="border-gray-300 text-gray-700 hover:bg-gray-50">
+              <Download className="mr-2 h-4 w-4" />
+              Export
+            </Button>
           </div>
         </div>
       </div>
 
-      <DataTable
-        columns={columns}
-        data={pricing}
-        searchQuery={searchQuery}
-        title="Park Pricing"
-        description="Manage pricing for park products and services"
-        onAddNew={handleAddNew}
-        searchFields={['park_name', 'entry_type']}
-      />
+             {/* Search Bar and Filters */}
+       <div className="bg-white rounded-lg border border-gray-200 p-4">
+         <div className="flex items-center justify-between mb-4">
+           <div className="flex items-center space-x-4">
+             <div className="relative">
+               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+               <input
+                 type="text"
+                 placeholder="Search for pricing..."
+                 value={searchQuery}
+                 onChange={(e) => {
+                   if (onSearchChange) {
+                     onSearchChange(e.target.value);
+                   }
+                 }}
+                 className="pl-10 w-96 text-gray-900 border border-gray-300 rounded-md py-2 focus:outline-none focus:ring-1 focus:ring-[var(--theme-green)] focus:border-[var(--theme-green)]"
+               />
+             </div>
+             <Button 
+               variant="outline" 
+               size="sm" 
+               className={`border-gray-300 text-gray-700 hover:bg-gray-50 ${hasActiveFilters ? 'bg-blue-50 border-blue-300 text-blue-700' : ''}`}
+               onClick={() => setShowFilters(!showFilters)}
+             >
+               <Filter className="mr-2 h-4 w-4" />
+               Filters {hasActiveFilters && <span className="ml-1 bg-blue-600 text-white text-xs px-2 py-1 rounded-full">{[filterPark, filterEntryType, filterCategory].filter(Boolean).length}</span>}
+             </Button>
+           </div>
+           
+           {/* Clear filters button */}
+           {hasActiveFilters && (
+             <Button 
+               variant="outline" 
+               size="sm" 
+               className="border-red-300 text-red-700 hover:bg-red-50"
+               onClick={clearFilters}
+             >
+               Clear Filters
+             </Button>
+           )}
+         </div>
+
+         {/* Filter Panel */}
+         {showFilters && (
+           <div className="border-t border-gray-200 pt-4">
+             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+               {/* Park Filter */}
+               <div>
+                 <label className="block text-sm font-medium text-gray-700 mb-2">
+                   Filter by Park
+                 </label>
+                 <input
+                   type="text"
+                   placeholder="Enter park name..."
+                   value={filterPark}
+                   onChange={(e) => setFilterPark(e.target.value)}
+                   className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-[var(--theme-green)] focus:border-[var(--theme-green)]"
+                 />
+               </div>
+
+               {/* Entry Type Filter */}
+               <div>
+                 <label className="block text-sm font-medium text-gray-700 mb-2">
+                   Filter by Entry Type
+                 </label>
+                 <input
+                   type="text"
+                   placeholder="Enter entry type..."
+                   value={filterEntryType}
+                   onChange={(e) => setFilterEntryType(e.target.value)}
+                   className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-[var(--theme-green)] focus:border-[var(--theme-green)]"
+                 />
+               </div>
+
+               {/* Category Filter */}
+               <div>
+                 <label className="block text-sm font-medium text-gray-700 mb-2">
+                   Filter by Category
+                 </label>
+                 <input
+                   type="text"
+                   placeholder="Enter category..."
+                   value={filterCategory}
+                   onChange={(e) => setFilterCategory(e.target.value)}
+                   className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-[var(--theme-green)] focus:border-[var(--theme-green)]"
+                 />
+               </div>
+             </div>
+
+             {/* Active Filters Display */}
+             {hasActiveFilters && (
+               <div className="mt-4 pt-4 border-t border-gray-200">
+                 <div className="flex items-center space-x-2 text-sm text-gray-600">
+                   <span className="font-medium">Active Filters:</span>
+                   {filterPark && (
+                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                       Park: {filterPark}
+                       <button
+                         onClick={() => setFilterPark("")}
+                         className="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full text-blue-400 hover:bg-blue-200 hover:text-blue-500"
+                       >
+                         ×
+                       </button>
+                     </span>
+                   )}
+                   {filterEntryType && (
+                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                       Entry Type: {filterEntryType}
+                       <button
+                         onClick={() => setFilterEntryType("")}
+                         className="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full text-green-400 hover:bg-green-200 hover:text-green-500"
+                       >
+                         ×
+                       </button>
+                       </span>
+                   )}
+                   {filterCategory && (
+                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                       Category: {filterCategory}
+                       <button
+                         onClick={() => setFilterCategory("")}
+                         className="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full text-purple-400 hover:bg-purple-200 hover:text-purple-500"
+                       >
+                         ×
+                       </button>
+                     </span>
+                   )}
+                 </div>
+               </div>
+             )}
+           </div>
+                  )}
+       </div>
+
+       {/* Results Summary */}
+       {hasActiveFilters && (
+         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+           <div className="text-sm text-blue-800">
+             <strong>Filtered Results:</strong> Showing {getFilteredPricing().length} of {pricing.length} total pricing records
+             {filterPark && ` • Park: "${filterPark}"`}
+             {filterEntryType && ` • Entry Type: "${filterEntryType}"`}
+             {filterCategory && ` • Category: "${filterCategory}"`}
+           </div>
+         </div>
+       )}
+
+       <DataTable
+         columns={columns}
+         data={getFilteredPricing()}
+         searchQuery={searchQuery}
+         searchFields={['park_name', 'entry_type']}
+       />
 
       <Modal
         isOpen={isModalOpen}
         onClose={handleCloseModal}
         title={editingPricing ? "Edit Park Pricing" : "Add New Park Pricing"}
+        disableClose={formLoading}
+        isLoading={formLoading}
+        loadingProgress={formLoading ? loadingProgress : undefined}
       >
         <div className="space-y-6">
+          {/* Summary of combinations to be created */}
+          {selectedParkIds.length > 0 && selectedEntryTypeIds.length > 0 && selectedAgeGroupIds.length > 0 && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <div className="text-sm text-blue-800">
+                <strong>Summary:</strong> This will create pricing for{' '}
+                <strong>{selectedParkIds.length}</strong> park(s) ×{' '}
+                <strong>{selectedEntryTypeIds.length}</strong> entry type(s) ×{' '}
+                <strong>{selectedAgeGroupIds.length}</strong> age group(s) ={' '}
+                <strong>{selectedParkIds.length * selectedEntryTypeIds.length * selectedAgeGroupIds.length}</strong> total pricing records
+              </div>
+            </div>
+          )}
+          
           {/* Form Fields */}
           <div className="space-y-4">
                          {/* National Parks Multi-Select Dropdown */}
@@ -1111,49 +1503,47 @@ export function ParkPricingTable({ searchQuery, onSearchChange }: ParkPricingTab
             )}
 
             {/* Entry Type Dropdown */}
-            {renderDropdown(
-              "Entry Type",
+            {renderMultiSelectDropdown(
+              "Entry Types",
               entryTypeDropdownOpen,
               setEntryTypeDropdownOpen,
-              selectedEntryTypeId,
-              setSelectedEntryTypeId,
+              selectedEntryTypeIds,
+              setSelectedEntryTypeIds,
               entryTypeSearchQuery,
               setEntryTypeSearchQuery,
               entryTypes,
-              getSelectedEntryType,
               "entry_name",
               "entry_name"
             )}
 
-                         {/* Season Dropdown */}
-             {renderDropdown(
-               "Season",
-               seasonDropdownOpen,
-               setSeasonDropdownOpen,
-               selectedSeasonId,
-               setSelectedSeasonId,
-               seasonSearchQuery,
-               setSeasonSearchQuery,
-               seasons,
-               getSelectedSeason,
-               "season_name",
-               "season_name"
-             )}
+            {/* Season Dropdown */}
+            {renderDropdown(
+              "Season",
+              seasonDropdownOpen,
+              setSeasonDropdownOpen,
+              selectedSeasonId,
+              setSelectedSeasonId,
+              seasonSearchQuery,
+              setSeasonSearchQuery,
+              seasons,
+              getSelectedSeason,
+              "season_name",
+              "season_name"
+            )}
 
-             {/* Age Group Dropdown */}
-             {renderDropdown(
-               "Age Group",
-               ageGroupDropdownOpen,
-               setAgeGroupDropdownOpen,
-               selectedAgeGroupId,
-               setSelectedAgeGroupId,
-               ageGroupSearchQuery,
-               setAgeGroupSearchQuery,
-               ageGroups,
-               getSelectedAgeGroup,
-               "age_group_name",
-               "age_group_name"
-             )}
+            {/* Age Group Dropdown */}
+            {renderMultiSelectDropdown(
+              "Age Groups",
+              ageGroupDropdownOpen,
+              setAgeGroupDropdownOpen,
+              selectedAgeGroupIds,
+              setSelectedAgeGroupIds,
+              ageGroupSearchQuery,
+              setAgeGroupSearchQuery,
+              ageGroups,
+              "age_group_name",
+              "age_group_name"
+            )}
 
              {/* Pricing Type Dropdown */}
              {renderDropdown(
@@ -1194,7 +1584,7 @@ export function ParkPricingTable({ searchQuery, onSearchChange }: ParkPricingTab
                      className="w-full px-3 py-2 border border-l-0 border-gray-300 rounded-r-md leading-5 bg-white text-gray-900 focus:outline-none focus:ring-1 focus:ring-[var(--theme-green)] focus:border-[var(--theme-green)] sm:text-sm flex items-center justify-between"
                    >
                      <span className={getSelectedCurrency() ? "text-gray-900" : "text-gray-500"}>
-                       {getSelectedCurrency() ? getSelectedCurrency().currency_name : "USD"}
+                       {getSelectedCurrency()?.currency_name || "USD"}
                      </span>
                      <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${currencyDropdownOpen ? 'rotate-180' : ''}`} />
                    </button>
@@ -1214,7 +1604,7 @@ export function ParkPricingTable({ searchQuery, onSearchChange }: ParkPricingTab
                               >
                                 <span className="truncate">{currency.currency_name}</span>
                                 {selectedCurrencyId === currency.id.toString() && (
-                                  <Check className="h-4 w-4 text-green-600 flex-shrink-0 ml-2" />
+                                  <Check className="h-4 w-4 text-[var(--theme-green)] flex-shrink-0 ml-2" />
                                 )}
                               </button>
                             ))
@@ -1243,7 +1633,7 @@ export function ParkPricingTable({ searchQuery, onSearchChange }: ParkPricingTab
                      value="exclusive"
                      checked={taxBehavior === "exclusive"}
                      onChange={(e) => setTaxBehavior(e.target.value)}
-                     className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300"
+                     className="h-4 w-4 text-[var(--theme-green)] focus:ring-[var(--theme-green)] border-gray-300"
                    />
                    <span className="ml-3 text-sm font-medium text-gray-900">Tax Exclusive</span>
                  </label>
@@ -1255,7 +1645,7 @@ export function ParkPricingTable({ searchQuery, onSearchChange }: ParkPricingTab
                      value="inclusive"
                      checked={taxBehavior === "inclusive"}
                      onChange={(e) => setTaxBehavior(e.target.value)}
-                     className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300"
+                     className="h-4 w-4 text-[var(--theme-green)] focus:ring-[var(--theme-green)] border-gray-300"
                    />
                    <span className="ml-3 text-sm font-medium text-gray-900">Tax Inclusive</span>
                  </label>
@@ -1282,7 +1672,7 @@ export function ParkPricingTable({ searchQuery, onSearchChange }: ParkPricingTab
             <button
               onClick={handleSubmit}
               disabled={formLoading}
-              className="px-4 py-2 bg-green-600 text-white rounded-md text-sm font-medium hover:bg-green-700 disabled:opacity-50"
+              className="px-4 py-2 bg-[var(--theme-green)] text-white rounded-md text-sm font-medium hover:bg-[var(--theme-green-dark)] disabled:opacity-50"
             >
               {formLoading ? (editingPricing ? "Updating..." : "Adding...") : (editingPricing ? "Update" : "Add")}
             </button>

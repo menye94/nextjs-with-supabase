@@ -1,67 +1,89 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { DataTable } from "@/components/ui/data-table";
-import { Badge } from "@/components/ui/badge";
-import { Modal } from "@/components/ui/modal";
-import { MoreHorizontal } from "lucide-react";
-
-interface EntryTypeTableProps {
-  searchQuery: string;
-  onSearchChange?: (query: string) => void;
-}
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Plus, Edit, Trash2, Search, X, MoreHorizontal, Power, PowerOff } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface EntryType {
   id: number;
   entry_name: string;
   is_active: boolean;
-  is_deleted: string | null;
+  is_deleted?: boolean;
 }
 
-export function EntryTypeTable({ searchQuery, onSearchChange }: EntryTypeTableProps) {
+export default function EntryTypeTable() {
   const [entryTypes, setEntryTypes] = useState<EntryType[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [showModal, setShowModal] = useState(false);
   const [editingEntryType, setEditingEntryType] = useState<EntryType | null>(null);
-  const [openMenuId, setOpenMenuId] = useState<number | null>(null);
-  const [entryName, setEntryName] = useState("");
-  const [formLoading, setFormLoading] = useState(false);
-  const [formError, setFormError] = useState("");
-  const menuRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
+  const [searchTerm, setSearchTerm] = useState("");
+  const [showInactive, setShowInactive] = useState(false);
+  const [togglingIds, setTogglingIds] = useState<Set<number>>(new Set());
+  const [deletingIds, setDeletingIds] = useState<Set<number>>(new Set());
+  const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{ isOpen: boolean; entryType: EntryType | null }>({
+    isOpen: false,
+    entryType: null
+  });
+  const [formData, setFormData] = useState({
+    entry_name: "",
+    is_active: true,
+  });
+
   const supabase = createClient();
 
+  // Fetch entry types from Supabase
   useEffect(() => {
     fetchEntryTypes();
   }, []);
 
-  // Close menus when clicking outside
+  // Refetch when showInactive filter changes
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (openMenuId !== null) {
-        const menuRef = menuRefs.current[openMenuId];
-        if (menuRef && !menuRef.contains(event.target as Node)) {
-          setOpenMenuId(null);
-        }
-      }
-    };
+    fetchEntryTypes();
+  }, [showInactive]);
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [openMenuId]);
+  // Auto-hide notifications after 5 seconds
+  useEffect(() => {
+    if (notification) {
+      const timer = setTimeout(() => {
+        setNotification(null);
+      }, 5000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [notification]);
+
+
 
   const fetchEntryTypes = async () => {
     try {
-      const { data, error } = await supabase
+      setLoading(true);
+      
+      let query = supabase
         .from('entry_type')
         .select('*')
+        .eq('is_deleted', false)
         .order('entry_name');
 
-      if (error) {
-        console.error('Error fetching entry types:', error);
-        return;
+      // If showInactive is false, only show active items
+      if (!showInactive) {
+        query = query.eq('is_active', true);
       }
 
+      const { data, error } = await query;
+
+      if (error) throw error;
       setEntryTypes(data || []);
     } catch (error) {
       console.error('Error fetching entry types:', error);
@@ -70,277 +92,488 @@ export function EntryTypeTable({ searchQuery, onSearchChange }: EntryTypeTablePr
     }
   };
 
-  const columns = [
-    {
-      key: 'entry_name',
-      label: 'Type Name',
-      sortable: true,
-      render: (value: string) => (
-        <span className="font-medium">
-          {value.split(' ').map(word => 
-            word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
-          ).join(' ')}
-        </span>
-      ),
-    },
-    {
-      key: 'description',
-      label: 'Description',
-      sortable: false,
-      render: (value: any, row: EntryType) => (
-        <span className="text-gray-500">
-          Entry type for {row.entry_name.split(' ').map(word => 
-            word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
-          ).join(' ')}
-        </span>
-      ),
-    },
-    {
-      key: 'is_active',
-      label: 'Status',
-      sortable: true,
-      render: (value: boolean) => (
-        <Badge variant={value ? "default" : "secondary"}>
-          {value ? 'Active' : 'Inactive'}
-        </Badge>
-      ),
-    },
-    {
-      key: 'actions',
-      label: 'Actions',
-      sortable: false,
-      render: (value: any, row: EntryType) => (
-        <div className="relative flex justify-center" ref={(el) => menuRefs.current[row.id] = el}>
-          <button
-            onClick={() => setOpenMenuId(openMenuId === row.id ? null : row.id)}
-            className="p-2 hover:bg-gray-100 rounded-md transition-colors"
-          >
-            <MoreHorizontal className="h-4 w-4 text-gray-600" />
-          </button>
-          
-          {openMenuId === row.id && (
-            <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-md shadow-lg z-50">
-              <div className="py-1">
-                <button
-                  onClick={() => handleEdit(row)}
-                  className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
-                >
-                  Edit
-                </button>
-                <div className="border-t border-gray-100 my-1"></div>
-                <button
-                  onClick={() => handleDelete(row)}
-                  className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-gray-50"
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      ),
-    },
-  ];
-
-  const handleAddNew = () => {
-    setEditingEntryType(null);
-    setEntryName("");
-    setFormError("");
-    setIsModalOpen(true);
-  };
-
-  const handleEdit = (entryType: EntryType) => {
-    setEditingEntryType(entryType);
-    setEntryName(entryType.entry_name);
-    setFormError("");
-    setIsModalOpen(true);
-    setOpenMenuId(null);
-  };
-
-  const handleDelete = async (entryType: EntryType) => {
-    if (window.confirm(`Are you sure you want to delete "${entryType.entry_name}"? This action cannot be undone.`)) {
-      try {
-        const { error } = await supabase
-          .from('entry_type')
-          .update({ is_deleted: new Date().toISOString() })
-          .eq('id', entryType.id);
-
-        if (error) {
-          console.error('Error deleting entry type:', error);
-          return;
-        }
-
-        fetchEntryTypes(); // Refresh the data
-        setOpenMenuId(null);
-      } catch (error) {
-        console.error('Error deleting entry type:', error);
-      }
-    }
-  };
-
-  const handleAddSuccess = () => {
-    fetchEntryTypes(); // Refresh the data
-  };
-
-  const handleCloseModal = () => {
-    setIsModalOpen(false);
-    setEditingEntryType(null);
-    setEntryName("");
-    setFormError("");
-  };
-
-  const handleSubmit = async () => {
-    if (!entryName.trim()) {
-      setFormError("Entry type name is required");
-      return;
-    }
-
-    setFormLoading(true);
-    setFormError("");
-
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
     try {
       if (editingEntryType) {
         // Update existing entry type
         const { error } = await supabase
           .from('entry_type')
-          .update({ entry_name: entryName.trim() })
+          .update({
+            entry_name: formData.entry_name,
+            is_active: formData.is_active
+          })
           .eq('id', editingEntryType.id);
 
-        if (error) {
-          console.error('Error updating entry type:', error);
-          setFormError(error.message);
-          return;
-        }
+        if (error) throw error;
       } else {
         // Create new entry type
         const { error } = await supabase
           .from('entry_type')
-          .insert({ entry_name: entryName.trim() });
+          .insert([{
+            entry_name: formData.entry_name,
+            is_active: formData.is_active
+          }]);
 
-        if (error) {
-          console.error('Error creating entry type:', error);
-          setFormError(error.message);
-          return;
-        }
+        if (error) throw error;
       }
 
-      handleAddSuccess();
-      handleCloseModal();
+      // Refresh the data
+      fetchEntryTypes();
+      setShowModal(false);
+      setEditingEntryType(null);
+      setFormData({ entry_name: "", is_active: true });
     } catch (error) {
       console.error('Error saving entry type:', error);
-      setFormError('An unexpected error occurred');
-    } finally {
-      setFormLoading(false);
     }
   };
+
+  const handleEdit = (entryType: EntryType) => {
+    setEditingEntryType(entryType);
+    setFormData({
+      entry_name: entryType.entry_name,
+      is_active: entryType.is_active,
+    });
+    setShowModal(true);
+  };
+
+  const handleDelete = async (id: number) => {
+    const entryType = entryTypes.find(et => et.id === id);
+    if (entryType) {
+      setDeleteConfirmation({ isOpen: true, entryType });
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteConfirmation.entryType) return;
+    
+    try {
+      // Add to deleting state
+      setDeletingIds(prev => new Set(prev).add(deleteConfirmation.entryType!.id));
+      
+      // Soft delete by setting is_deleted to true
+      const { error } = await supabase
+        .from('entry_type')
+        .update({ is_deleted: true })
+        .eq('id', deleteConfirmation.entryType.id);
+
+      if (error) throw error;
+      
+      // Show success notification
+      setNotification({
+        message: `Successfully deleted "${deleteConfirmation.entryType.entry_name}"`,
+        type: 'success'
+      });
+      
+      // Refresh the data
+      fetchEntryTypes();
+      setDeleteConfirmation({ isOpen: false, entryType: null });
+    } catch (error) {
+      console.error('Error deleting entry type:', error);
+      
+      // Show error notification
+      setNotification({
+        message: `Failed to delete "${deleteConfirmation.entryType.entry_name}"`,
+        type: 'error'
+      });
+    } finally {
+      // Remove from deleting state
+      setDeletingIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(deleteConfirmation.entryType!.id);
+        return newSet;
+      });
+    }
+  };
+
+  const handleToggleStatus = async (entryType: EntryType) => {
+    const newStatus = !entryType.is_active;
+    const action = newStatus ? 'activate' : 'deactivate';
+    
+    if (!confirm(`Are you sure you want to ${action} "${entryType.entry_name}"?`)) return;
+    
+    try {
+      // Add to toggling state
+      setTogglingIds(prev => new Set(prev).add(entryType.id));
+      
+      const { error } = await supabase
+        .from('entry_type')
+        .update({ is_active: newStatus })
+        .eq('id', entryType.id);
+
+      if (error) throw error;
+      
+      // Show success notification
+      setNotification({
+        message: `Successfully ${action}d "${entryType.entry_name}"`,
+        type: 'success'
+      });
+      
+      // Refresh the data
+      fetchEntryTypes();
+    } catch (error) {
+      console.error(`Error ${action}ing entry type:`, error);
+      
+      // Show error notification
+      setNotification({
+        message: `Failed to ${action} "${entryType.entry_name}"`,
+        type: 'error'
+      });
+    } finally {
+      // Remove from toggling state
+      setTogglingIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(entryType.id);
+        return newSet;
+      });
+    }
+  };
+
+  const handleAddNew = () => {
+    setEditingEntryType(null);
+    setFormData({ entry_name: "", is_active: true });
+    setShowModal(true);
+  };
+
+  const filteredEntryTypes = entryTypes.filter(entryType => 
+    entryType.entry_name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const columns = [
+    {
+      key: 'entry_name',
+      label: 'Name',
+      render: (value: any, row: EntryType) => (
+        <span className="font-medium text-gray-900">{row.entry_name}</span>
+      ),
+    },
+    {
+      key: 'is_active',
+      label: 'Status',
+      render: (value: any, row: EntryType) => (
+        <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+          row.is_active 
+            ? 'bg-green-100 text-green-800' 
+            : 'bg-red-100 text-red-800'
+        }`}>
+          {row.is_active ? 'Active' : 'Inactive'}
+        </span>
+      ),
+    },
+    {
+      key: 'actions',
+      label: 'Actions',
+      render: (value: any, row: EntryType) => (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0 hover:bg-gray-100"
+            >
+              <MoreHorizontal className="h-4 w-4" />
+              <span className="sr-only">Open menu</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuItem
+              onClick={() => handleEdit(row)}
+              className="cursor-pointer text-theme-green hover:text-theme-green-dark focus:text-theme-green-dark"
+            >
+              <Edit className="mr-2 h-4 w-4" />
+              Edit
+            </DropdownMenuItem>
+            
+            <DropdownMenuSeparator />
+            
+            <DropdownMenuItem
+              onClick={() => handleToggleStatus(row)}
+              disabled={togglingIds.has(row.id)}
+              className={`cursor-pointer ${
+                row.is_active 
+                  ? 'text-orange-600 hover:text-orange-700 focus:text-orange-700' 
+                  : 'text-green-600 hover:text-green-700 focus:text-green-700'
+              } ${togglingIds.has(row.id) ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              {togglingIds.has(row.id) ? (
+                <>
+                  <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  Updating...
+                </>
+              ) : row.is_active ? (
+                <>
+                  <PowerOff className="mr-2 h-4 w-4" />
+                  Deactivate
+                </>
+              ) : (
+                <>
+                  <Power className="mr-2 h-4 w-4" />
+                  Activate
+                </>
+              )}
+            </DropdownMenuItem>
+            
+            <DropdownMenuSeparator />
+            
+            <DropdownMenuItem
+              onClick={() => handleDelete(row.id)}
+              className="cursor-pointer text-red-600 hover:text-red-700 focus:text-red-700"
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ),
+    },
+  ];
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-gray-500">Loading entry types...</div>
+        <div className="text-lg">Loading entry types...</div>
       </div>
     );
   }
 
   return (
-    <>
-      {/* Search and Filter Bar */}
-      <div className="mb-6 bg-white rounded-lg border border-gray-200 p-4">
-        <div className="flex items-center justify-between">
-          {/* Search Bar */}
-          <div className="flex-1 max-w-md">
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-              </div>
-              <input
-                type="text"
-                placeholder="Search for entry types..."
-                value={searchQuery}
-                onChange={(e) => {
-                  if (onSearchChange) {
-                    onSearchChange(e.target.value);
-                  }
-                }}
-                className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[var(--theme-green)] focus:border-[var(--theme-green)] sm:text-sm"
-              />
-            </div>
-          </div>
+    <div className="space-y-6 bg-white">
+      <div className="flex justify-between items-center bg-white">
+        <h2 className="text-2xl font-bold text-gray-900">Entry Types</h2>
+        <Button onClick={handleAddNew}>
+          <Plus className="h-4 w-4 mr-2" />
+          Add Entry Type
+        </Button>
+      </div>
 
-          {/* Filter Controls */}
-          <div className="flex items-center space-x-3">
-            {/* Filters Button */}
-            <button className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-[var(--theme-green)] focus:border-[var(--theme-green)]">
-              <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-              Filters
+      {/* Notification */}
+      {notification && (
+        <div className={`p-4 rounded-lg border ${
+          notification.type === 'success' 
+            ? 'bg-green-50 border-green-200 text-green-800' 
+            : 'bg-red-50 border-red-200 text-red-800'
+        }`}>
+          <div className="flex justify-between items-center">
+            <span>{notification.message}</span>
+            <button
+              onClick={() => setNotification(null)}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <X className="h-4 w-4" />
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Search and Filters */}
+      <div className="flex gap-4 items-center bg-white">
+        <div className="flex-1">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+            <Input
+              placeholder="Search entry types..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10 bg-white border-gray-300 text-gray-900"
+            />
+          </div>
+        </div>
+        <div className="flex items-center space-x-2">
+          <Button
+            variant={showInactive ? "default" : "outline"}
+            size="sm"
+            onClick={() => setShowInactive(!showInactive)}
+            className={`${
+              showInactive 
+                ? 'bg-orange-600 hover:bg-orange-700 text-white' 
+                : 'border-orange-300 text-orange-600 hover:bg-orange-50'
+            }`}
+          >
+            {showInactive ? 'Hide Inactive' : 'Show Inactive'}
+          </Button>
         </div>
       </div>
 
+      {/* Summary Stats */}
+      <div className="flex justify-between items-center text-sm text-gray-600">
+        <div className="flex space-x-4">
+          <span>Total: {entryTypes.length}</span>
+          <span className="text-green-600">Active: {entryTypes.filter(et => et.is_active).length}</span>
+          {showInactive && (
+            <span className="text-red-600">Inactive: {entryTypes.filter(et => !et.is_active).length}</span>
+          )}
+        </div>
+        <div className="text-gray-500">
+          {showInactive ? 'Showing all entry types' : 'Showing active entry types only'}
+        </div>
+      </div>
+
+      {/* Entry Types Table */}
       <DataTable
+        data={filteredEntryTypes}
         columns={columns}
-        data={entryTypes}
-        searchQuery={searchQuery}
-        title="Entry Types"
-        description="Manage different types of park entry options"
-        onAddNew={handleAddNew}
+        searchQuery={searchTerm}
         searchFields={['entry_name']}
+        showBulkSelection={false}
+        itemsPerPage={10}
+        showPagination={true}
       />
 
-      <Modal
-        isOpen={isModalOpen}
-        onClose={handleCloseModal}
-        title={editingEntryType ? "Edit Entry Type" : "Add New Entry Type"}
-      >
-        <div className="space-y-6">
-          {/* Form Fields */}
-          <div className="space-y-4">
-            <div>
-              <label htmlFor="entryName" className="block text-sm font-medium text-gray-700 mb-2">
-                Entry Type Name
-              </label>
-              <input
-                id="entryName"
-                type="text"
-                value={entryName}
-                onChange={(e) => setEntryName(e.target.value)}
-                placeholder="Enter entry type name"
-                className="block w-full px-3 py-2 border border-gray-300 rounded-md leading-5 bg-white text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[var(--theme-green)] focus:border-[var(--theme-green)] sm:text-sm"
-              />
-            </div>
-            
-            {/* Error Message */}
-            {formError && (
-              <div className="text-red-600 text-sm">
-                {formError}
+      {/* Tailwind CSS Modal */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          {/* Backdrop */}
+          <div 
+            className="fixed inset-0 bg-black bg-opacity-50 transition-all duration-300 ease-in-out backdrop-blur-sm"
+            onClick={() => setShowModal(false)}
+          ></div>
+          
+          {/* Modal */}
+          <div className="flex min-h-full items-center justify-center p-4 text-center">
+            <div className="relative transform overflow-hidden rounded-2xl bg-white text-left align-middle shadow-2xl transition-all w-full max-w-md border border-gray-100">
+              {/* Header */}
+              <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-white">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  {editingEntryType ? 'Edit Entry Type' : 'Add New Entry Type'}
+                </h3>
+                <button
+                  onClick={() => setShowModal(false)}
+                  className="rounded-full p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-[var(--theme-green)] focus:ring-offset-2 transition-all duration-200"
+                >
+                  <X className="h-5 w-5" />
+                </button>
               </div>
-            )}
-          </div>
+              
+              {/* Body */}
+              <form onSubmit={handleSubmit} className="p-6 space-y-4">
+                <div>
+                  <Label htmlFor="entry_name" className="block text-sm font-medium text-gray-700 mb-2">
+                    Entry Type Name *
+                  </Label>
+                  <Input
+                    id="entry_name"
+                    value={formData.entry_name}
+                    onChange={(e) => setFormData({ ...formData, entry_name: e.target.value })}
+                    placeholder="Enter entry type name"
+                    required
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-[var(--theme-green)] focus:border-[var(--theme-green)] transition-all duration-200 hover:border-gray-400"
+                  />
+                </div>
+                
+                <div className="flex items-center space-x-2">
+                  <input
+                    id="is_active"
+                    type="checkbox"
+                    checked={formData.is_active}
+                    onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
+                    className="h-5 w-5 text-[var(--theme-green)] focus:ring-2 focus:ring-[var(--theme-green)] focus:ring-offset-2 border-gray-300 rounded-lg transition-all duration-200 hover:border-gray-400"
+                  />
+                  <Label htmlFor="is_active" className="text-sm font-medium text-gray-700">
+                    Active
+                  </Label>
+                </div>
 
-          {/* Action Buttons */}
-          <div className="flex justify-end space-x-3">
-            <button
-              onClick={handleCloseModal}
-              disabled={formLoading}
-              className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSubmit}
-              disabled={formLoading}
-              className="px-4 py-2 bg-green-600 text-white rounded-md text-sm font-medium hover:bg-green-700 disabled:opacity-50"
-            >
-              {formLoading ? (editingEntryType ? "Updating..." : "Adding...") : (editingEntryType ? "Update" : "Add")}
-            </button>
+                {/* Footer */}
+                <div className="flex justify-end gap-3 pt-6 border-t border-gray-200">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setShowModal(false)}
+                    className="px-6 py-3 border border-gray-300 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--theme-green)] transition-all duration-200"
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    type="submit"
+                    className="px-6 py-3 bg-[var(--theme-green)] text-white rounded-xl text-sm font-medium hover:bg-[var(--theme-green-dark)] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--theme-green)] transition-all duration-200 shadow-lg hover:shadow-xl"
+                  >
+                    {editingEntryType ? 'Update Entry Type' : 'Add Entry Type'}
+                  </Button>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
-      </Modal>
-    </>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirmation.isOpen && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          {/* Backdrop */}
+          <div 
+            className="fixed inset-0 bg-black bg-opacity-50 transition-all duration-300 ease-in-out backdrop-blur-sm"
+            onClick={() => setDeleteConfirmation({ isOpen: false, entryType: null })}
+          ></div>
+          
+          {/* Modal */}
+          <div className="flex min-h-full items-center justify-center p-4 text-center">
+            <div className="relative transform overflow-hidden rounded-2xl bg-white text-left align-middle shadow-2xl transition-all w-full max-w-md border border-gray-100">
+              {/* Header */}
+              <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-gradient-to-r from-red-50 to-white">
+                <h3 className="text-lg font-semibold text-red-900">
+                  Confirm Delete
+                </h3>
+                <button
+                  onClick={() => setDeleteConfirmation({ isOpen: false, entryType: null })}
+                  className="rounded-full p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-all duration-200"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              
+              {/* Body */}
+              <div className="p-6 space-y-4">
+                <div className="flex items-center space-x-3">
+                  <div className="flex-shrink-0">
+                    <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                      <Trash2 className="h-5 w-5 text-red-600" />
+                    </div>
+                  </div>
+                  <div>
+                    <h4 className="text-base font-medium text-gray-900">
+                      Delete Entry Type
+                    </h4>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Are you sure you want to delete <span className="font-semibold text-gray-900">"{deleteConfirmation.entryType?.entry_name}"</span>?
+                    </p>
+                    <p className="text-xs text-gray-500 mt-2">
+                      This action cannot be undone. The entry type will be permanently removed.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Footer */}
+                <div className="flex justify-end gap-3 pt-6 border-t border-gray-200">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setDeleteConfirmation({ isOpen: false, entryType: null })}
+                    className="px-6 py-3 border border-gray-300 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-all duration-200"
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    type="button"
+                    onClick={confirmDelete}
+                    disabled={deleteConfirmation.entryType ? deletingIds.has(deleteConfirmation.entryType.id) : false}
+                    className="px-6 py-3 bg-red-600 text-white rounded-xl text-sm font-medium hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {deleteConfirmation.entryType && deletingIds.has(deleteConfirmation.entryType.id) ? (
+                      <>
+                        <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                        Deleting...
+                      </>
+                    ) : (
+                      'Delete Entry Type'
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 } 

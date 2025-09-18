@@ -2,6 +2,8 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { ProductsNav } from "@/components/products-nav";
 import { ProductsTabs } from "@/components/products-tabs";
+import { Suspense } from "react";
+import { LazyLoader } from "@/components/ui/lazy-loader";
 
 export default async function ProductsPage() {
   const supabase = await createClient();
@@ -22,7 +24,33 @@ export default async function ProductsPage() {
             <p className="mt-2 text-gray2">Manage your park products, pricing, and configurations.</p>
           </div>
 
-          <ProductsTabs />
+          <Suspense fallback={
+            <div className="space-y-6">
+              <div className="border-b border-gray-200">
+                <div className="flex items-center justify-between">
+                  <nav className="-mb-px flex space-x-8">
+                    {["Parks", "Entry Type", "Category", "Seasons", "Park Pricing", "Camping Type", "Camping Price"].map((tab) => (
+                      <div key={tab} className="py-2 px-1 border-b-2 font-medium text-sm text-gray-400 border-transparent">
+                        {tab}
+                      </div>
+                    ))}
+                  </nav>
+                </div>
+              </div>
+              <div className="bg-white rounded-lg shadow">
+                <div className="p-6">
+                  <div className="flex items-center justify-center py-12">
+                    <div className="flex items-center space-x-2">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-theme-green"></div>
+                      <span className="text-gray-600 text-lg">Loading Products...</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          }>
+            <ProductsTabs />
+          </Suspense>
         </div>
       </main>
     </div>

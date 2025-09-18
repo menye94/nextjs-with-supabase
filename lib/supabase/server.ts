@@ -1,6 +1,10 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
+// Simple in-memory cache for frequently accessed data
+const cache = new Map<string, { data: any; timestamp: number }>();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 /**
  * Especially important if using Fluid compute: Don't put this client in a
  * global variable. Always create a new client within each function when using
@@ -39,10 +43,55 @@ export async function createClient() {
             }
           },
         },
+        // Add connection pooling and performance optimizations
+        global: {
+          headers: {
+            'X-Client-Info': 'safari-quote-app',
+          },
+        },
       },
     );
   } catch (error) {
     console.error('Error creating Supabase client:', error);
     throw error;
   }
+}
+
+// Cache utility functions
+export function getCachedData<T>(key: string): T | null {
+  const cached = cache.get(key);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached.data as T;
+  }
+  return null;
+}
+
+export function setCachedData<T>(key: string, data: T): void {
+  cache.set(key, { data, timestamp: Date.now() });
+}
+
+export function clearCache(): void {
+  cache.clear();
+}
+
+// Optimized query function with caching
+export async function optimizedQuery<T>(
+  queryFn: () => Promise<{ data: T | null; error: any }>,
+  cacheKey: string,
+  useCache: boolean = true
+): Promise<{ data: T | null; error: any }> {
+  if (useCache) {
+    const cached = getCachedData<T>(cacheKey);
+    if (cached) {
+      return { data: cached, error: null };
+    }
+  }
+
+  const result = await queryFn();
+  
+  if (result.data && useCache) {
+    setCachedData(cacheKey, result.data);
+  }
+  
+  return result;
 }

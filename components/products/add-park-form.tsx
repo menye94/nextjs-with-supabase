@@ -11,7 +11,7 @@ import { ChevronDown, Check } from "lucide-react";
 interface AddParkFormProps {
   onClose: () => void;
   onSuccess: () => void;
-  editPark?: {
+  park?: {
     id: number;
     national_park_name: string;
     country_id: number;
@@ -30,11 +30,11 @@ interface Circuit {
   national_park_circuit_name: string;
 }
 
-export function AddParkForm({ onClose, onSuccess, editPark }: AddParkFormProps) {
-  const [parkName, setParkName] = useState(editPark?.national_park_name || "");
-  const [countryId, setCountryId] = useState(editPark?.country_id.toString() || "1");
-  const [circuitId, setCircuitId] = useState(editPark?.park_circuit_id.toString() || "1");
-  const [isActive, setIsActive] = useState(editPark?.is_active ?? true);
+export function AddParkForm({ onClose, onSuccess, park }: AddParkFormProps) {
+  const [parkName, setParkName] = useState(park?.national_park_name || "");
+  const [countryId, setCountryId] = useState(park?.country_id.toString() || "1");
+  const [circuitId, setCircuitId] = useState(park?.park_circuit_id.toString() || "1");
+
   const [loading, setLoading] = useState(false);
   const [countries, setCountries] = useState<Country[]>([]);
   const [circuits, setCircuits] = useState<Circuit[]>([]);
@@ -51,10 +51,53 @@ export function AddParkForm({ onClose, onSuccess, editPark }: AddParkFormProps) 
   
   const supabase = createClient();
 
+  // Test database connection
+  const testDatabaseConnection = async () => {
+    try {
+      console.log('Testing database connection...');
+      const { data, error } = await supabase
+        .from('countries')
+        .select('count')
+        .limit(1);
+      
+      if (error) {
+        console.error('Database connection test failed:', error);
+        setError('Database connection failed. Please check your configuration.');
+      } else {
+        console.log('Database connection successful');
+      }
+    } catch (error) {
+      console.error('Database connection test error:', error);
+      setError('Database connection failed. Please check your configuration.');
+    }
+  };
+
   useEffect(() => {
+    testDatabaseConnection();
     fetchCountries();
     fetchCircuits();
   }, []);
+
+  // Update form fields when park prop changes (for editing)
+  useEffect(() => {
+    console.log('AddParkForm: park prop changed:', park);
+    if (park) {
+      console.log('Setting form fields for editing:', {
+        name: park.national_park_name,
+        country: park.country_id,
+        circuit: park.park_circuit_id
+      });
+      setParkName(park.national_park_name || "");
+      setCountryId(park.country_id.toString() || "1");
+      setCircuitId(park.park_circuit_id.toString() || "1");
+    } else {
+      console.log('Resetting form for new park');
+      // Reset form for new park
+      setParkName("");
+      setCountryId("1");
+      setCircuitId("1");
+    }
+  }, [park]);
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -81,7 +124,7 @@ export function AddParkForm({ onClose, onSuccess, editPark }: AddParkFormProps) 
 
       if (error) {
         console.error('Error fetching countries:', error);
-        setError(`Failed to load countries: ${error.message}`);
+        setError(`Failed to load countries: ${error.message || 'Unknown error'}`);
         return;
       }
 
@@ -105,7 +148,7 @@ export function AddParkForm({ onClose, onSuccess, editPark }: AddParkFormProps) 
 
       if (error) {
         console.error('Error fetching circuits:', error);
-        setError(`Failed to load circuits: ${error.message}`);
+        setError(`Failed to load circuits: ${error.message || 'Unknown error'}`);
         return;
       }
 
@@ -143,37 +186,61 @@ export function AddParkForm({ onClose, onSuccess, editPark }: AddParkFormProps) 
     }
 
     try {
-      if (editPark) {
+      if (park) {
         // Update existing park
+        const parkData = {
+          national_park_name: parkName.trim(),
+          country_id: parseInt(countryId),
+          park_circuit_id: parseInt(circuitId),
+          is_active: true,
+        };
+        
+        console.log('Attempting to update park with data:', parkData, 'for park ID:', park.id);
+        
         const { error } = await supabase
           .from('national_parks')
-          .update({
-            national_park_name: parkName.trim(),
-            country_id: parseInt(countryId),
-            park_circuit_id: parseInt(circuitId),
-            is_active: isActive,
-          })
-          .eq('id', editPark.id);
+          .update(parkData)
+          .eq('id', park.id);
 
         if (error) {
           console.error('Error updating park:', error);
-          setError(error.message);
+          
+          // Check for specific constraint violations
+          if (error.code === '23505' && error.message.includes('unique_park_name')) {
+            setError('A park with this name already exists. Please choose a different name.');
+          } else if (error.code === '23503') {
+            setError('Invalid country or circuit selection. Please check your selections.');
+          } else {
+            setError(error.message || 'Failed to update park. Please try again.');
+          }
           return;
         }
       } else {
         // Insert new park
+        const parkData = {
+          national_park_name: parkName.trim(),
+          country_id: parseInt(countryId),
+          park_circuit_id: parseInt(circuitId),
+          is_active: true,
+        };
+        
+        console.log('Attempting to insert park with data:', parkData);
+        
         const { error } = await supabase
           .from('national_parks')
-          .insert({
-            national_park_name: parkName.trim(),
-            country_id: parseInt(countryId),
-            park_circuit_id: parseInt(circuitId),
-            is_active: isActive,
-          });
+          .insert(parkData);
 
         if (error) {
           console.error('Error adding park:', error);
-          setError(error.message);
+          
+          // Check for specific constraint violations
+          if (error.code === '23505' && error.message.includes('unique_park_name')) {
+            setError('A park with this name already exists. Please choose a different name.');
+          } else if (error.code === '23503') {
+            setError('Invalid country or circuit selection. Please check your selections.');
+          } else {
+            setError(error.message || 'Failed to add park. Please try again.');
+          }
           return;
         }
       }
@@ -182,7 +249,7 @@ export function AddParkForm({ onClose, onSuccess, editPark }: AddParkFormProps) 
       onClose();
     } catch (error) {
       console.error('Error saving park:', error);
-      setError("An unexpected error occurred");
+      setError(error instanceof Error ? error.message : "An unexpected error occurred");
     } finally {
       setLoading(false);
     }
@@ -252,7 +319,7 @@ export function AddParkForm({ onClose, onSuccess, editPark }: AddParkFormProps) 
                          <span className="text-sm text-gray-500 leading-tight">Country #{country.id}</span>
                        </div>
                                              {countryId === country.id.toString() && (
-                         <Check className="w-4 h-4 text-green-600 ml-3" />
+                         <Check className="w-4 h-4 text-[var(--theme-green)] ml-3" />
                        )}
                     </button>
                   ))}
@@ -302,7 +369,7 @@ export function AddParkForm({ onClose, onSuccess, editPark }: AddParkFormProps) 
                          <span className="text-sm text-gray-500 leading-tight">Circuit #{circuit.id}</span>
                        </div>
                                              {circuitId === circuit.id.toString() && (
-                         <Check className="w-4 h-4 text-green-600 ml-3" />
+                         <Check className="w-4 h-4 text-[var(--theme-green)] ml-3" />
                        )}
                     </button>
                   ))}
@@ -317,16 +384,18 @@ export function AddParkForm({ onClose, onSuccess, editPark }: AddParkFormProps) 
           <Label htmlFor="parkName" className="text-sm font-medium text-gray-700">
             Park Name
           </Label>
-                                           <input
-              id="parkName"
-              type="text"
-              value={parkName}
-              onChange={(e) => setParkName(e.target.value)}
-              placeholder="Enter park name"
-              required
-              className="w-full h-10 border border-gray-300 bg-white hover:border-gray-400 focus:border-green-500 focus:ring-1 focus:ring-green-500 rounded-md px-3 py-2 text-gray-900 placeholder-gray-500"
-            />
+          <input
+            id="parkName"
+            type="text"
+            value={parkName}
+            onChange={(e) => setParkName(e.target.value)}
+            placeholder="Enter park name"
+            required
+            className="w-full h-10 border border-gray-300 bg-white hover:border-gray-400 focus:border-green-500 focus:ring-1 focus:ring-green-500 rounded-md px-3 py-2 text-gray-900 placeholder-gray-500"
+          />
         </div>
+
+
 
         
 
@@ -343,9 +412,9 @@ export function AddParkForm({ onClose, onSuccess, editPark }: AddParkFormProps) 
                      <Button 
              type="submit" 
              disabled={loading}
-             className="px-6 py-2 bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
+             className="px-6 py-2 bg-[var(--theme-green)] text-white hover:bg-[var(--theme-green-dark)] disabled:opacity-50"
            >
-             {loading ? "SAVING..." : (editPark ? "UPDATE" : "SAVE")}
+             {loading ? "SAVING..." : (park ? "UPDATE" : "SAVE")}
            </Button>
         </div>
       </form>

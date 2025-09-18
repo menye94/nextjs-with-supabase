@@ -1,17 +1,13 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { DataTable } from "@/components/ui/data-table";
-import { Badge } from "@/components/ui/badge";
-import { Modal } from "@/components/ui/modal";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Plus, Edit, Trash2, Search, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { AddParkForm } from "@/components/products/add-park-form";
-import { MoreHorizontal } from "lucide-react";
-
-interface ParksTableProps {
-  searchQuery: string;
-  onSearchChange?: (query: string) => void;
-}
 
 interface Park {
   id: number;
@@ -29,37 +25,22 @@ interface Circuit {
   national_park_circuit_name: string;
 }
 
-export function ParksTable({ searchQuery, onSearchChange }: ParksTableProps) {
+export default function ParksTable() {
   const [parks, setParks] = useState<Park[]>([]);
   const [circuits, setCircuits] = useState<Circuit[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [showModal, setShowModal] = useState(false);
   const [editingPark, setEditingPark] = useState<Park | null>(null);
-  const [openMenuId, setOpenMenuId] = useState<number | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
   const [selectedCircuit, setSelectedCircuit] = useState<string>("");
   const [circuitsLoading, setCircuitsLoading] = useState(true);
-  const menuRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
+
   const supabase = createClient();
 
   useEffect(() => {
     fetchParks();
     fetchCircuits();
   }, []);
-
-  // Close menus when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (openMenuId !== null) {
-        const menuRef = menuRefs.current[openMenuId];
-        if (menuRef && !menuRef.contains(event.target as Node)) {
-          setOpenMenuId(null);
-        }
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [openMenuId]);
 
   const fetchCircuits = async () => {
     try {
@@ -90,11 +71,10 @@ export function ParksTable({ searchQuery, onSearchChange }: ParksTableProps) {
           country:countries(country_name),
           circuit:national_park_circuit(national_park_circuit_name)
         `)
-        .is('is_deleted', null);
+        .order('national_park_name');
 
-      // Apply circuit filter if selected
       if (selectedCircuit) {
-        query = query.eq('park_circuit_id', parseInt(selectedCircuit));
+        query = query.eq('park_circuit_id', selectedCircuit);
       }
 
       const { data, error } = await query;
@@ -112,287 +92,213 @@ export function ParksTable({ searchQuery, onSearchChange }: ParksTableProps) {
     }
   };
 
+  const handleDelete = async (id: number) => {
+    if (!confirm('Are you sure you want to delete this park?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('national_parks')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      fetchParks();
+    } catch (error) {
+      console.error('Error deleting park:', error);
+      alert('Error deleting park. Please try again.');
+    }
+  };
+
+  const handleEdit = (park: Park) => {
+    console.log('ParksTable: handleEdit called with park:', park);
+    setEditingPark(park);
+    setShowModal(true);
+  };
+
+  const handleAddNew = () => {
+    setEditingPark(null);
+    setShowModal(true);
+  };
+
+  const handleAddSuccess = () => {
+    setShowModal(false);
+    fetchParks();
+  };
+
+  const handleCloseModal = () => {
+    setShowModal(false);
+    setEditingPark(null);
+  };
+
+  const handleCircuitFilterChange = (circuitId: string) => {
+    setSelectedCircuit(circuitId);
+    fetchParks();
+  };
+
+  const filteredParks = parks.filter(park => 
+    park.national_park_name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   const columns = [
     {
       key: 'national_park_name',
       label: 'Park Name',
-      sortable: true,
-      render: (value: string) => (
-        <span className="font-medium">
-          {value.split(' ').map(word => 
-            word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
-          ).join(' ')}
+      render: (value: any, row: Park) => (
+        <span className="font-medium text-gray-900">{row.national_park_name}</span>
+      ),
+    },
+    {
+      key: 'country',
+      label: 'Country',
+      render: (value: any, row: Park) => (
+        <span className="text-gray-600">
+          {row.country?.country_name || 'N/A'}
         </span>
       ),
     },
     {
-      key: 'location',
-      label: 'Location',
-      sortable: true,
+      key: 'circuit',
+      label: 'Circuit',
       render: (value: any, row: Park) => (
-        <div>
-          <div className="font-medium">
-            {row.country?.country_name 
-              ? row.country.country_name.split(' ').map(word => 
-                  word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
-                ).join(' ')
-              : 'Unknown'
-            }
-          </div>
-          <div className="text-sm text-gray-500">
-            {row.circuit?.national_park_circuit_name 
-              ? row.circuit.national_park_circuit_name.split(' ').map(word => 
-                  word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
-                ).join(' ')
-              : 'Unknown Circuit'
-            }
-          </div>
-        </div>
+        <span className="text-gray-600">
+          {row.circuit?.national_park_circuit_name || 'N/A'}
+        </span>
       ),
     },
     {
       key: 'is_active',
       label: 'Status',
-      sortable: true,
-      render: (value: boolean) => (
-        <Badge variant={value ? "default" : "secondary"}>
-          {value ? 'Active' : 'Inactive'}
-        </Badge>
+      render: (value: any, row: Park) => (
+        <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+          row.is_active 
+            ? 'bg-green-100 text-green-800' 
+            : 'bg-red-100 text-red-800'
+        }`}>
+          {row.is_active ? 'Active' : 'Inactive'}
+        </span>
       ),
     },
     {
       key: 'actions',
       label: 'Actions',
-      sortable: false,
       render: (value: any, row: Park) => (
-        <div className="relative flex justify-center" ref={(el) => menuRefs.current[row.id] = el}>
-          <button
-            onClick={() => setOpenMenuId(openMenuId === row.id ? null : row.id)}
-            className="p-2 hover:bg-gray-100 rounded-md transition-colors"
+        <div className="flex space-x-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => handleEdit(row)}
+                         className="text-theme-green hover:text-theme-green-dark"
           >
-            <MoreHorizontal className="h-4 w-4 text-gray-600" />
-          </button>
-          
-          {openMenuId === row.id && (
-            <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-md shadow-lg z-50">
-              <div className="py-1">
-                <button
-                  onClick={() => handleEdit(row)}
-                  className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
-                >
-                  Edit
-                </button>
-                <div className="border-t border-gray-100 my-1"></div>
-                <button
-                  onClick={() => handleDelete(row)}
-                  className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-gray-50"
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          )}
+            <Edit className="h-4 w-4" />
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => handleDelete(row.id)}
+            className="text-red-600 hover:text-red-700"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
         </div>
       ),
     },
   ];
 
-  const handleAddNew = () => {
-    setEditingPark(null);
-    setIsModalOpen(true);
-  };
-
-  const handleEdit = (park: Park) => {
-    setEditingPark(park);
-    setIsModalOpen(true);
-    setOpenMenuId(null);
-  };
-
-  const handleDelete = async (park: Park) => {
-    if (window.confirm(`Are you sure you want to delete "${park.national_park_name}"? This action cannot be undone.`)) {
-      try {
-        const { error } = await supabase
-          .from('national_parks')
-          .update({ is_deleted: new Date().toISOString() })
-          .eq('id', park.id);
-
-        if (error) {
-          console.error('Error deleting park:', error);
-          return;
-        }
-
-        fetchParks(); // Refresh the data
-        setOpenMenuId(null);
-      } catch (error) {
-        console.error('Error deleting park:', error);
-      }
-    }
-  };
-
-  const handleCircuitFilterChange = (circuitId: string) => {
-    setSelectedCircuit(circuitId);
-  };
-
-  const handleAddSuccess = () => {
-    fetchParks(); // Refresh the data
-  };
-
-  const handleCloseModal = () => {
-    setIsModalOpen(false);
-    setEditingPark(null);
-  };
-
-  const handleBulkAction = async (action: string, selectedIds: string[]) => {
-    try {
-      switch (action) {
-        case 'delete':
-          // Bulk delete selected parks
-          for (const id of selectedIds) {
-            await handleDelete({ id: parseInt(id) } as Park);
-          }
-          break;
-        case 'activate':
-          // Bulk activate selected parks
-          const { error: activateError } = await supabase
-            .from('national_parks')
-            .update({ is_active: true })
-            .in('id', selectedIds.map(id => parseInt(id)));
-          
-          if (activateError) {
-            console.error('Error activating parks:', activateError);
-          } else {
-            fetchParks(); // Refresh the data
-          }
-          break;
-        case 'deactivate':
-          // Bulk deactivate selected parks
-          const { error: deactivateError } = await supabase
-            .from('national_parks')
-            .update({ is_active: false })
-            .in('id', selectedIds.map(id => parseInt(id)));
-          
-          if (deactivateError) {
-            console.error('Error deactivating parks:', deactivateError);
-          } else {
-            fetchParks(); // Refresh the data
-          }
-          break;
-        default:
-          console.log('Unknown bulk action:', action);
-      }
-    } catch (error) {
-      console.error('Error performing bulk action:', error);
-    }
-  };
-
-  // Refetch parks when circuit filter changes
-  useEffect(() => {
-    fetchParks();
-  }, [selectedCircuit]);
-
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-gray-500">Loading parks...</div>
+        <div className="text-lg">Loading parks...</div>
       </div>
     );
   }
 
   return (
-    <>
-      {/* Search and Filter Bar */}
-      <div className="mb-6 bg-white rounded-lg border border-gray-200 p-4">
-        <div className="flex items-center justify-between">
-          {/* Search Bar */}
-          <div className="flex-1 max-w-md">
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-              </div>
-              <input
-                type="text"
-                placeholder="Search for parks..."
-                value={searchQuery}
-                onChange={(e) => {
-                  if (onSearchChange) {
-                    onSearchChange(e.target.value);
-                  }
-                }}
-                className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-[var(--theme-green)] focus:border-[var(--theme-green)] sm:text-sm"
-              />
-            </div>
-          </div>
+    <div className="space-y-6 bg-white">
+      <div className="flex justify-between items-center bg-white">
+        <h2 className="text-2xl font-bold text-gray-900">National Parks</h2>
+        <Button onClick={handleAddNew}>
+          <Plus className="h-4 w-4 mr-2" />
+          Add Park
+        </Button>
+      </div>
 
-          {/* Filter Controls */}
-          <div className="flex items-center space-x-3">
-            {/* Circuit Filter */}
-            <div className="flex items-center space-x-2">
-              <select
-                value={selectedCircuit}
-                onChange={(e) => handleCircuitFilterChange(e.target.value)}
-                className="block pl-3 pr-8 py-2 border border-gray-300 rounded-md leading-5 bg-white text-gray-900 focus:outline-none focus:ring-1 focus:ring-[var(--theme-green)] focus:border-[var(--theme-green)] sm:text-sm"
-              >
-                <option value="">All Circuits</option>
-                {circuitsLoading ? (
-                  <option disabled>Loading circuits...</option>
-                ) : (
-                                     circuits.map((circuit) => (
-                     <option key={circuit.id} value={circuit.id.toString()}>
-                       {circuit.national_park_circuit_name.split(' ').map(word => 
-                         word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
-                       ).join(' ')}
-                     </option>
-                   ))
-                )}
-              </select>
-            </div>
-
-            {/* Filters Button */}
-            <button className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-[var(--theme-green)] focus:border-[var(--theme-green)]">
-              <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-              Filters
-            </button>
+      {/* Search and Filters */}
+      <div className="flex gap-4 items-center bg-white">
+        <div className="flex-1">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+            <Input
+              placeholder="Search parks..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10 bg-white border-gray-300 text-gray-900"
+            />
           </div>
+        </div>
+        <div className="w-64">
+          <select
+            value={selectedCircuit}
+            onChange={(e) => handleCircuitFilterChange(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+          >
+            <option value="">All Circuits</option>
+            {circuits.map((circuit) => (
+              <option key={circuit.id} value={circuit.id}>
+                {circuit.national_park_circuit_name}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
+      {/* Parks Table */}
       <DataTable
+        data={filteredParks}
         columns={columns}
-        data={parks}
-        searchQuery={searchQuery}
-        title="Parks"
-        description="Manage national parks and their configurations"
-        onAddNew={handleAddNew}
+        searchQuery={searchTerm}
         searchFields={['national_park_name']}
-        onBulkAction={handleBulkAction}
-        bulkActions={[
-          { label: 'Activate', value: 'activate', variant: 'default' },
-          { label: 'Deactivate', value: 'deactivate', variant: 'secondary' },
-          { label: 'Delete', value: 'delete', variant: 'destructive' }
-        ]}
+        showBulkSelection={false}
+        itemsPerPage={10}
+        showPagination={true}
       />
 
-      <Modal
-        isOpen={isModalOpen}
-        onClose={handleCloseModal}
-        title={editingPark ? "Edit Park" : "Add New Park"}
-      >
-        <AddParkForm
-          onClose={handleCloseModal}
-          onSuccess={handleAddSuccess}
-          editPark={editingPark ? {
-            id: editingPark.id,
-            national_park_name: editingPark.national_park_name,
-            country_id: editingPark.country_id,
-            park_circuit_id: editingPark.park_circuit_id,
-            is_active: editingPark.is_active,
-          } : undefined}
-        />
-      </Modal>
-    </>
+      {/* Tailwind CSS Modal */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          {/* Backdrop */}
+          <div 
+            className="fixed inset-0 bg-black bg-opacity-50 transition-all duration-300 ease-in-out backdrop-blur-sm"
+            onClick={handleCloseModal}
+          ></div>
+          
+          {/* Modal */}
+          <div className="flex min-h-full items-center justify-center p-4 text-center">
+            <div className="relative transform overflow-hidden rounded-2xl bg-white text-left align-middle shadow-2xl transition-all w-full max-w-2xl border border-gray-100">
+              {/* Header */}
+              <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-white">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  {editingPark ? 'Edit Park' : 'Add New Park'}
+                </h3>
+                <button
+                  onClick={handleCloseModal}
+                  className="rounded-full p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-[var(--theme-green)] focus:ring-offset-2 transition-all duration-200"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              
+              {/* Body */}
+              <div className="p-6">
+                <AddParkForm
+                  park={editingPark}
+                  onSuccess={handleAddSuccess}
+                  onClose={handleCloseModal}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 } 
