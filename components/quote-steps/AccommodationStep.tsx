@@ -457,7 +457,7 @@ export function AccommodationStep({ quoteData, updateQuoteData, errors, setError
     }
   };
 
-  const addHotelSelection = () => {
+  const addHotelSelection = async () => {
     if (!selectedHotel || !selectedRoomType || !selectedMealPlan || !selectedEntryType) return;
 
     const hotel = hotels.find(h => h.id.toString() === selectedHotel);
