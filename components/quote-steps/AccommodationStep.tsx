@@ -85,7 +85,190 @@ export function AccommodationStep({ quoteData, updateQuoteData, errors, setError
 
   useEffect(() => {
     fetchInitialData();
+    loadSelectedHotels();
   }, []);
+
+  // Load selected hotels from database
+  const loadSelectedHotels = async () => {
+    try {
+      const tempOffer = await getOrCreateTempOffer();
+      if (!tempOffer) return;
+
+      const { data: hotelServices, error } = await supabase
+        .from('offer_hotel_services')
+        .select(`
+          id,
+          price,
+          discount_percent,
+          final_service_price,
+          description,
+          hotel_rate_id,
+          hotel_rates!inner(
+            hotel_id,
+            hotels!inner(
+              hotel_name,
+              hotel_category!inner(name)
+            ),
+            rooms!inner(room_name),
+            hotel_meal_plans!inner(name),
+            entry_type!inner(entry_name),
+            currency!inner(currency_name)
+          )
+        `)
+        .eq('offer_id', tempOffer.id);
+
+      if (error) {
+        console.error('Error loading hotel services:', error);
+        return;
+      }
+
+      if (hotelServices && hotelServices.length > 0) {
+        const loadedHotels: HotelSelection[] = hotelServices.map(service => {
+          const hotelRate = service.hotel_rates;
+          const hotel = hotelRate.hotels;
+          const room = hotelRate.rooms;
+          const mealPlan = hotelRate.hotel_meal_plans;
+          const entryType = hotelRate.entry_type;
+          const currency = hotelRate.currency;
+
+          // Parse description for additional data
+          const description = service.description || '';
+          const [checkIn, checkOut, nights, pax] = description.split('|');
+
+          return {
+            id: service.id.toString(),
+            hotelId: hotelRate.hotel_id,
+            hotelName: hotel.hotel_name,
+            roomType: room.room_name,
+            checkIn: checkIn || new Date().toISOString().split('T')[0],
+            checkOut: checkOut || new Date().toISOString().split('T')[0],
+            nights: parseInt(nights) || 1,
+            pax: parseInt(pax) || 1,
+            price: parseFloat(service.final_service_price) || 0,
+            currency: currency.currency_name.toUpperCase() as 'USD' | 'TZS'
+          };
+        });
+
+        updateQuoteData({ selectedHotels: loadedHotels });
+        console.log('Loaded hotel services from database:', loadedHotels);
+      }
+    } catch (error) {
+      console.error('Error loading selected hotels:', error);
+    }
+  };
+
+  // Get or create temporary offer for testing
+  const getOrCreateTempOffer = async () => {
+    try {
+      // First try to get existing temp offer
+      const { data: existingOffers, error: fetchError } = await supabase
+        .from('offer')
+        .select('id')
+        .eq('id', 8) // Use the same temp offer ID as parks
+        .limit(1);
+
+      if (fetchError) {
+        console.error('Error fetching temp offer:', fetchError);
+        return null;
+      }
+
+      if (existingOffers && existingOffers.length > 0) {
+        return existingOffers[0];
+      }
+
+      // Create new temp offer if none exists
+      const { data: newOffer, error: createError } = await supabase
+        .from('offer')
+        .insert({
+          client_id: 8,
+          owner_id: '9be45380-53cf-4d8a-a4d1-f0a63cdda5a3', // Use existing company owner
+          offer_name: 'Temp Hotel Services Offer',
+          status: 'draft'
+        })
+        .select('id')
+        .single();
+
+      if (createError) {
+        console.error('Error creating temp offer:', createError);
+        return null;
+      }
+
+      return newOffer;
+    } catch (error) {
+      console.error('Error in getOrCreateTempOffer:', error);
+      return null;
+    }
+  };
+
+  // Save selected hotels to database
+  const saveSelectedHotels = async (hotelsToSave: HotelSelection[]) => {
+    try {
+      const tempOffer = await getOrCreateTempOffer();
+      if (!tempOffer) {
+        console.error('Could not get or create temp offer');
+        return;
+      }
+
+      // Clear existing hotel services for this offer
+      await supabase
+        .from('offer_hotel_services')
+        .delete()
+        .eq('offer_id', tempOffer.id);
+
+      if (hotelsToSave.length === 0) {
+        console.log('No hotels to save');
+        return;
+      }
+
+      // Get hotel rates for each selected hotel
+      const hotelServicesData = [];
+      
+      for (const hotel of hotelsToSave) {
+        // Find the hotel rate ID for this hotel
+        const { data: hotelRates, error: ratesError } = await supabase
+          .from('hotel_rates')
+          .select('id')
+          .eq('hotel_id', hotel.hotelId)
+          .limit(1);
+
+        if (ratesError || !hotelRates || hotelRates.length === 0) {
+          console.warn(`No hotel rates found for hotel ${hotel.hotelId}`);
+          continue;
+        }
+
+        const hotelRateId = hotelRates[0].id;
+        const unitPrice = hotel.nights > 0 && hotel.pax > 0 ? hotel.price / (hotel.nights * hotel.pax) : 0;
+        const discountPercent = 0; // Default discount
+        const calculatedFinalPrice = unitPrice * hotel.nights * hotel.pax * (1 - discountPercent / 100);
+        
+        // Create description with hotel details
+        const description = `${hotel.checkIn}|${hotel.checkOut}|${hotel.nights}|${hotel.pax}`;
+
+        hotelServicesData.push({
+          offer_id: tempOffer.id,
+          hotel_rate_id: hotelRateId,
+          price: unitPrice,
+          discount_percent: discountPercent,
+          final_service_price: calculatedFinalPrice,
+          description: description
+        });
+      }
+
+      if (hotelServicesData.length > 0) {
+        const { error: insertError } = await supabase
+          .from('offer_hotel_services')
+          .insert(hotelServicesData);
+
+        if (insertError) {
+          console.error('Error inserting hotel services:', insertError);
+        } else {
+          console.log('Successfully saved hotel services to database');
+        }
+      }
+    } catch (error) {
+      console.error('Error saving selected hotels:', error);
+    }
+  };
 
   const fetchInitialData = async () => {
     try {
@@ -331,6 +514,26 @@ export function AccommodationStep({ quoteData, updateQuoteData, errors, setError
       });
     }
 
+    // Save to database
+    const updatedHotels = isEditing && editingHotelId 
+      ? quoteData.selectedHotels.map(hotel =>
+          hotel.id === editingHotelId ? {
+            ...hotel,
+            hotelId: parseInt(selectedHotel),
+            hotelName: hotel.hotel_name,
+            roomType: roomType.room_name,
+            checkIn: checkIn,
+            checkOut: checkOut,
+            nights: numberOfNights,
+            pax: numberOfRooms,
+            price: totalPrice,
+            currency: selectedCurrency
+          } : hotel
+        )
+      : [...quoteData.selectedHotels, newSelection];
+
+    await saveSelectedHotels(updatedHotels);
+
     // Reset form
     setSelectedHotel('');
     setSelectedRoomType('');
@@ -382,18 +585,27 @@ export function AccommodationStep({ quoteData, updateQuoteData, errors, setError
     setHotelRates([]);
   };
 
-  const removeHotelSelection = (id: string) => {
+  const removeHotelSelection = async (id: string) => {
+    const updatedHotels = quoteData.selectedHotels.filter(hotel => hotel.id !== id);
     updateQuoteData({
-      selectedHotels: quoteData.selectedHotels.filter(hotel => hotel.id !== id)
+      selectedHotels: updatedHotels
     });
+    
+    // Save to database
+    await saveSelectedHotels(updatedHotels);
   };
 
-  const updateHotelSelection = (id: string, updates: Partial<HotelSelection>) => {
+  const updateHotelSelection = async (id: string, updates: Partial<HotelSelection>) => {
+    const updatedHotels = quoteData.selectedHotels.map(hotel =>
+      hotel.id === id ? { ...hotel, ...updates } : hotel
+    );
+    
     updateQuoteData({
-      selectedHotels: quoteData.selectedHotels.map(hotel =>
-        hotel.id === id ? { ...hotel, ...updates } : hotel
-      )
+      selectedHotels: updatedHotels
     });
+    
+    // Save to database
+    await saveSelectedHotels(updatedHotels);
   };
 
   return (
