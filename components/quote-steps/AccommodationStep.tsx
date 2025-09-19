@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { SearchableDropdown } from "@/components/ui/searchable-dropdown";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2, MapPin, Users, Calendar, DollarSign, Star, Bed } from "lucide-react";
+import { Plus, Trash2, MapPin, Users, Calendar, DollarSign, Star, Bed, Edit } from "lucide-react";
 import { QuoteData, HotelSelection } from "@/app/quote-create/page";
 
 interface AccommodationStepProps {
@@ -76,6 +76,10 @@ export function AccommodationStep({ quoteData, updateQuoteData, errors, setError
   const [numberOfNights, setNumberOfNights] = useState(1);
   const [pricePerNight, setPricePerNight] = useState(0);
   const [selectedCurrency, setSelectedCurrency] = useState<'USD' | 'TZS'>('USD');
+  
+  // Editing state
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingHotelId, setEditingHotelId] = useState<string | null>(null);
 
   const supabase = createClient();
 
@@ -285,23 +289,88 @@ export function AccommodationStep({ quoteData, updateQuoteData, errors, setError
     // Calculate total price
     const totalPrice = pricePerNight * numberOfNights * numberOfRooms;
 
-    const newSelection: HotelSelection = {
-      id: Date.now().toString(),
-      hotelId: parseInt(selectedHotel),
-      hotelName: hotel.hotel_name,
-      roomType: roomType.room_name,
-      checkIn: checkIn,
-      checkOut: checkOut,
-      nights: numberOfNights,
-      pax: numberOfRooms, // Using rooms as pax for now
-      price: totalPrice,
-      currency: selectedCurrency
-    };
+    if (isEditing && editingHotelId) {
+      // Update existing hotel selection
+      updateQuoteData({
+        selectedHotels: quoteData.selectedHotels.map(hotel =>
+          hotel.id === editingHotelId ? {
+            ...hotel,
+            hotelId: parseInt(selectedHotel),
+            hotelName: hotel.hotel_name,
+            roomType: roomType.room_name,
+            checkIn: checkIn,
+            checkOut: checkOut,
+            nights: numberOfNights,
+            pax: numberOfRooms,
+            price: totalPrice,
+            currency: selectedCurrency
+          } : hotel
+        )
+      });
+      
+      // Reset editing state
+      setIsEditing(false);
+      setEditingHotelId(null);
+    } else {
+      // Add new hotel selection
+      const newSelection: HotelSelection = {
+        id: Date.now().toString(),
+        hotelId: parseInt(selectedHotel),
+        hotelName: hotel.hotel_name,
+        roomType: roomType.room_name,
+        checkIn: checkIn,
+        checkOut: checkOut,
+        nights: numberOfNights,
+        pax: numberOfRooms, // Using rooms as pax for now
+        price: totalPrice,
+        currency: selectedCurrency
+      };
 
-    updateQuoteData({
-      selectedHotels: [...quoteData.selectedHotels, newSelection]
-    });
+      updateQuoteData({
+        selectedHotels: [...quoteData.selectedHotels, newSelection]
+      });
+    }
 
+    // Reset form
+    setSelectedHotel('');
+    setSelectedRoomType('');
+    setSelectedMealPlan('');
+    setSelectedEntryType('');
+    setNumberOfRooms(1);
+    setNumberOfNights(1);
+    setPricePerNight(0);
+    setHotelRates([]);
+  };
+
+  const editHotelSelection = (hotelId: string) => {
+    const hotel = quoteData.selectedHotels.find(h => h.id === hotelId);
+    if (!hotel) return;
+
+    // Find the hotel data to get category
+    const hotelData = hotels.find(h => h.id === hotel.hotelId);
+    if (hotelData) {
+      setSelectedCategory(hotelData.category_name);
+    }
+
+    // Populate form with hotel data
+    setSelectedHotel(hotel.hotelId.toString());
+    setSelectedRoomType(roomTypes.find(r => r.room_name === hotel.roomType)?.id.toString() || '');
+    setSelectedMealPlan(''); // Will be set when room type is selected
+    setSelectedEntryType(''); // Will be set when meal plan is selected
+    setNumberOfRooms(hotel.pax);
+    setNumberOfNights(hotel.nights);
+    setPricePerNight(hotel.nights > 0 && hotel.pax > 0 ? hotel.price / (hotel.nights * hotel.pax) : 0);
+    setSelectedCurrency(hotel.currency);
+
+    // Set editing state
+    setIsEditing(true);
+    setEditingHotelId(hotelId);
+  };
+
+  const cancelEdit = () => {
+    setIsEditing(false);
+    setEditingHotelId(null);
+    
     // Reset form
     setSelectedHotel('');
     setSelectedRoomType('');
@@ -586,8 +655,18 @@ export function AccommodationStep({ quoteData, updateQuoteData, errors, setError
                 disabled={!selectedHotel || !selectedRoomType || !selectedMealPlan || !selectedEntryType || pricePerNight <= 0}
               >
                 <Plus className="h-4 w-4 mr-2" />
-                Add Hotel
+                {isEditing ? 'Update Hotel' : 'Add Hotel'}
               </Button>
+
+              {isEditing && (
+                <Button
+                  variant="outline"
+                  onClick={cancelEdit}
+                  className="border-2 border-gray-300 hover:border-gray-400 hover:bg-gray-50 text-gray-700 font-semibold"
+                >
+                  Cancel Edit
+                </Button>
+              )}
 
               <Button
                 variant="outline"
@@ -601,6 +680,8 @@ export function AccommodationStep({ quoteData, updateQuoteData, errors, setError
                   setNumberOfNights(1);
                   setPricePerNight(0);
                   setHotelRates([]);
+                  setIsEditing(false);
+                  setEditingHotelId(null);
                 }}
                 className="border-2 border-gray-300 hover:border-red-400 hover:bg-red-50 text-gray-700 font-semibold"
                 disabled={!selectedCategory}
@@ -612,163 +693,219 @@ export function AccommodationStep({ quoteData, updateQuoteData, errors, setError
         </CardContent>
       </Card>
 
-      {/* Selected Hotels */}
+      {/* Selected Hotels Tables */}
       {quoteData.selectedHotels.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              <span>Selected Hotels & Accommodations</span>
-              <Badge variant="outline">
-                {quoteData.selectedHotels.length} selected
-              </Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {quoteData.selectedHotels.map((hotel) => {
-                // Find the hotel data to check if it's in a selected national park
-                const hotelData = hotels.find(h => h.id === hotel.hotelId);
-                const selectedNationalParks = quoteData.selectedParks?.map(park => park.nationalParkName) || [];
-                const isInSelectedPark = hotelData?.national_park_name && selectedNationalParks.includes(hotelData.national_park_name);
-                
-                return (
-                  <div key={hotel.id} className="border rounded-lg p-4">
-                    <div className="flex justify-between items-start mb-3">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-medium">{hotel.hotelName}</h3>
-                          {isInSelectedPark && (
-                            <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
-                              🏞️ In Selected Park
-                            </Badge>
-                          )}
-                          {hotelData?.is_partner && (
-                            <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-700 border-yellow-200">
-                              ⭐ Partner Hotel
-                            </Badge>
-                          )}
-                        </div>
-                        <div className="flex gap-2 mt-1">
-                          <Badge variant="outline" className="text-xs">
-                            {hotel.roomType}
-                          </Badge>
-                          <Badge variant="outline" className="text-xs">
-                            {hotel.checkIn} - {hotel.checkOut}
-                          </Badge>
-                          <Badge variant="outline" className="text-xs">
-                            {hotel.currency}
-                          </Badge>
-                        </div>
-                        <div className="mt-2">
-                          <p className="text-sm font-semibold text-green-600">
-                            Total Price: {hotel.currency} {hotel.price.toLocaleString()}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            {hotel.currency} {hotel.nights > 0 && hotel.pax > 0 
-                              ? (hotel.price / (hotel.nights * hotel.pax)).toFixed(2)
-                              : '0.00'
-                            } per person per night
-                          </p>
-                        </div>
-                      </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeHotelSelection(hotel.id)}
-                      className="text-red-600 hover:text-red-700"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div>
-                      <Label htmlFor={`pax-${hotel.id}`} className="text-sm">
-                        Number of People
-                      </Label>
-                      <Input
-                        id={`pax-${hotel.id}`}
-                        type="number"
-                        min="1"
-                        value={hotel.pax}
-                        onChange={(e) => {
-                          const newPax = parseInt(e.target.value) || 1;
-                          // Calculate price per person per night safely
-                          const currentPricePerPersonPerNight = hotel.nights > 0 && hotel.pax > 0 
-                            ? hotel.price / (hotel.nights * hotel.pax) 
-                            : 0;
-                          const newTotalPrice = currentPricePerPersonPerNight * hotel.nights * newPax;
-                          updateHotelSelection(hotel.id, { 
-                            pax: newPax,
-                            price: newTotalPrice
-                          });
-                        }}
-                        className="mt-1"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor={`nights-${hotel.id}`} className="text-sm">
-                        Number of Nights
-                      </Label>
-                      <Input
-                        id={`nights-${hotel.id}`}
-                        type="number"
-                        min="1"
-                        value={hotel.nights}
-                        onChange={(e) => {
-                          const newNights = parseInt(e.target.value) || 1;
-                          // Calculate price per person per night safely
-                          const currentPricePerPersonPerNight = hotel.nights > 0 && hotel.pax > 0 
-                            ? hotel.price / (hotel.nights * hotel.pax) 
-                            : 0;
-                          const newTotalPrice = currentPricePerPersonPerNight * newNights * hotel.pax;
-                          updateHotelSelection(hotel.id, { 
-                            nights: newNights,
-                            price: newTotalPrice
-                          });
-                        }}
-                        className="mt-1"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor={`price-${hotel.id}`} className="text-sm">
-                        Price per Person per Night ({hotel.currency})
-                      </Label>
-                      <Input
-                        id={`price-${hotel.id}`}
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={hotel.nights > 0 && hotel.pax > 0 
-                          ? (hotel.price / (hotel.nights * hotel.pax)).toFixed(2)
-                          : '0.00'
-                        }
-                        onChange={(e) => {
-                          const newPricePerPersonPerNight = parseFloat(e.target.value) || 0;
-                          const newTotalPrice = newPricePerPersonPerNight * hotel.nights * hotel.pax;
-                          updateHotelSelection(hotel.id, { 
-                            price: newTotalPrice
-                          });
-                        }}
-                        className="mt-1"
-                      />
-                    </div>
-                    <div className="flex items-end">
-                      <div className="text-sm text-gray-600">
-                        <div>Total: {hotel.pax} people</div>
-                        <div>{hotel.nights} night{hotel.nights !== 1 ? 's' : ''}</div>
-                        <div className="font-semibold text-green-600">
-                          {hotel.currency} {hotel.price.toLocaleString()}
-                        </div>
-                      </div>
-                    </div>
+        <div className="space-y-6">
+          {/* USD Hotels Table */}
+          {quoteData.selectedHotels.filter(hotel => hotel.currency === 'USD').length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">
+                  <span>USD Hotels & Accommodations</span>
+                  <Badge variant="outline">
+                    {quoteData.selectedHotels.filter(hotel => hotel.currency === 'USD').length} selected
+                  </Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left py-2 px-3 font-medium text-sm text-gray-700">Hotel Name</th>
+                        <th className="text-center py-2 px-3 font-medium text-sm text-gray-700">PAX</th>
+                        <th className="text-center py-2 px-3 font-medium text-sm text-gray-700">Nights</th>
+                        <th className="text-right py-2 px-3 font-medium text-sm text-gray-700">Amount (USD)</th>
+                        <th className="text-center py-2 px-3 font-medium text-sm text-gray-700">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {quoteData.selectedHotels
+                        .filter(hotel => hotel.currency === 'USD')
+                        .map((hotel) => {
+                          const hotelData = hotels.find(h => h.id === hotel.hotelId);
+                          const selectedNationalParks = quoteData.selectedParks?.map(park => park.nationalParkName) || [];
+                          const isInSelectedPark = hotelData?.national_park_name && selectedNationalParks.includes(hotelData.national_park_name);
+                          
+                          return (
+                            <tr key={hotel.id} className="border-b hover:bg-gray-50">
+                              <td className="py-3 px-3">
+                                <div>
+                                  <div className="font-medium text-sm">{hotel.hotelName}</div>
+                                  <div className="text-xs text-gray-500 mt-1">
+                                    {hotel.roomType} • {hotel.checkIn} - {hotel.checkOut}
+                                  </div>
+                                  <div className="flex gap-1 mt-1">
+                                    {isInSelectedPark && (
+                                      <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
+                                        🏞️ In Selected Park
+                                      </Badge>
+                                    )}
+                                    {hotelData?.is_partner && (
+                                      <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-700 border-yellow-200">
+                                        ⭐ Partner
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="py-3 px-3 text-center font-medium">
+                                {hotel.pax}
+                              </td>
+                              <td className="py-3 px-3 text-center font-medium">
+                                {hotel.nights}
+                              </td>
+                              <td className="py-3 px-3 text-right font-medium">
+                                ${hotel.price.toFixed(2)}
+                              </td>
+                              <td className="py-3 px-3 text-center">
+                                <div className="flex gap-1 justify-center">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => editHotelSelection(hotel.id)}
+                                    className="text-blue-600 hover:text-blue-700 h-8 w-8 p-0"
+                                    title="Edit"
+                                  >
+                                    <Edit className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => removeHotelSelection(hotel.id)}
+                                    className="text-red-600 hover:text-red-700 h-8 w-8 p-0"
+                                    title="Delete"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="border-t pt-3 mt-4">
+                  <div className="flex justify-between items-center">
+                    <span className="font-medium text-sm">Total USD Hotels:</span>
+                    <span className="text-lg font-bold">
+                      ${quoteData.selectedHotels
+                        .filter(hotel => hotel.currency === 'USD')
+                        .reduce((sum, hotel) => sum + hotel.price, 0)
+                        .toFixed(2)}
+                    </span>
                   </div>
                 </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* TZS Hotels Table */}
+          {quoteData.selectedHotels.filter(hotel => hotel.currency === 'TZS').length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">
+                  <span>TZS Hotels & Accommodations</span>
+                  <Badge variant="outline">
+                    {quoteData.selectedHotels.filter(hotel => hotel.currency === 'TZS').length} selected
+                  </Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left py-2 px-3 font-medium text-sm text-gray-700">Hotel Name</th>
+                        <th className="text-center py-2 px-3 font-medium text-sm text-gray-700">PAX</th>
+                        <th className="text-center py-2 px-3 font-medium text-sm text-gray-700">Nights</th>
+                        <th className="text-right py-2 px-3 font-medium text-sm text-gray-700">Amount (TZS)</th>
+                        <th className="text-center py-2 px-3 font-medium text-sm text-gray-700">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {quoteData.selectedHotels
+                        .filter(hotel => hotel.currency === 'TZS')
+                        .map((hotel) => {
+                          const hotelData = hotels.find(h => h.id === hotel.hotelId);
+                          const selectedNationalParks = quoteData.selectedParks?.map(park => park.nationalParkName) || [];
+                          const isInSelectedPark = hotelData?.national_park_name && selectedNationalParks.includes(hotelData.national_park_name);
+                          
+                          return (
+                            <tr key={hotel.id} className="border-b hover:bg-gray-50">
+                              <td className="py-3 px-3">
+                                <div>
+                                  <div className="font-medium text-sm">{hotel.hotelName}</div>
+                                  <div className="text-xs text-gray-500 mt-1">
+                                    {hotel.roomType} • {hotel.checkIn} - {hotel.checkOut}
+                                  </div>
+                                  <div className="flex gap-1 mt-1">
+                                    {isInSelectedPark && (
+                                      <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
+                                        🏞️ In Selected Park
+                                      </Badge>
+                                    )}
+                                    {hotelData?.is_partner && (
+                                      <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-700 border-yellow-200">
+                                        ⭐ Partner
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="py-3 px-3 text-center font-medium">
+                                {hotel.pax}
+                              </td>
+                              <td className="py-3 px-3 text-center font-medium">
+                                {hotel.nights}
+                              </td>
+                              <td className="py-3 px-3 text-right font-medium">
+                                TZS {hotel.price.toLocaleString()}
+                              </td>
+                              <td className="py-3 px-3 text-center">
+                                <div className="flex gap-1 justify-center">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => editHotelSelection(hotel.id)}
+                                    className="text-blue-600 hover:text-blue-700 h-8 w-8 p-0"
+                                    title="Edit"
+                                  >
+                                    <Edit className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => removeHotelSelection(hotel.id)}
+                                    className="text-red-600 hover:text-red-700 h-8 w-8 p-0"
+                                    title="Delete"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="border-t pt-3 mt-4">
+                  <div className="flex justify-between items-center">
+                    <span className="font-medium text-sm">Total TZS Hotels:</span>
+                    <span className="text-lg font-bold">
+                      TZS {quoteData.selectedHotels
+                        .filter(hotel => hotel.currency === 'TZS')
+                        .reduce((sum, hotel) => sum + hotel.price, 0)
+                        .toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
       )}
 
       {/* No Hotels Message */}
