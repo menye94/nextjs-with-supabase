@@ -181,7 +181,28 @@ export function AccommodationStep({ quoteData, updateQuoteData, errors, setError
           national_park_name: hotel.locations.national_parks?.national_park_name || null,
           is_partner: hotel.is_partner
         }));
-        setHotels(transformedHotels);
+
+        // Get selected national parks from quote data
+        const selectedNationalParks = quoteData.selectedParks?.map(park => park.nationalParkName) || [];
+        
+        // Sort hotels to prioritize those in selected national park locations
+        const sortedHotels = transformedHotels.sort((a, b) => {
+          const aIsInSelectedPark = a.national_park_name && selectedNationalParks.includes(a.national_park_name);
+          const bIsInSelectedPark = b.national_park_name && selectedNationalParks.includes(b.national_park_name);
+          
+          // First priority: Hotels in selected national parks
+          if (aIsInSelectedPark && !bIsInSelectedPark) return -1;
+          if (!aIsInSelectedPark && bIsInSelectedPark) return 1;
+          
+          // Second priority: Partner hotels
+          if (a.is_partner && !b.is_partner) return -1;
+          if (!a.is_partner && b.is_partner) return 1;
+          
+          // Third priority: Alphabetical by name
+          return a.hotel_name.localeCompare(b.hotel_name);
+        });
+
+        setHotels(sortedHotels);
       }
     } catch (error) {
       console.error('Error fetching hotels:', error);
@@ -193,6 +214,13 @@ export function AccommodationStep({ quoteData, updateQuoteData, errors, setError
       fetchHotels();
     }
   }, [selectedCategory]);
+
+  // Refresh hotels when selected parks change
+  useEffect(() => {
+    if (selectedCategory) {
+      fetchHotels();
+    }
+  }, [quoteData.selectedParks]);
 
   useEffect(() => {
     if (selectedHotel && selectedMealPlan && selectedEntryType) {
@@ -308,6 +336,21 @@ export function AccommodationStep({ quoteData, updateQuoteData, errors, setError
             <Bed className="h-5 w-5 text-blue-600" />
             Hotel & Accommodation Selection
           </CardTitle>
+          {quoteData.selectedParks && quoteData.selectedParks.length > 0 && (
+            <div className="mt-2">
+              <p className="text-sm text-gray-600 mb-2">Selected National Parks:</p>
+              <div className="flex flex-wrap gap-2">
+                {quoteData.selectedParks.map((park, index) => (
+                  <Badge key={index} variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
+                    🏞️ {park.nationalParkName}
+                  </Badge>
+                ))}
+              </div>
+              <p className="text-xs text-blue-600 mt-2">
+                💡 Hotels located in these national park areas will be prioritized in the selection below
+              </p>
+            </div>
+          )}
         </CardHeader>
         <CardContent>
           <div className="space-y-6">
@@ -338,21 +381,41 @@ export function AccommodationStep({ quoteData, updateQuoteData, errors, setError
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="hotel-select" className="text-sm font-semibold text-gray-700 flex items-center gap-1">
-                    <MapPin className="h-4 w-4 text-green-500" />
-                    Hotel *
-                  </Label>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="hotel-select" className="text-sm font-semibold text-gray-700 flex items-center gap-1">
+                      <MapPin className="h-4 w-4 text-green-500" />
+                      Hotel *
+                    </Label>
+                    {quoteData.selectedParks && quoteData.selectedParks.length > 0 && (
+                      <div className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded-md">
+                        🏞️ Hotels in selected parks shown first
+                      </div>
+                    )}
+                  </div>
                   <SearchableDropdown
                     id="hotel-select"
                     value={selectedHotel}
                     onChange={setSelectedHotel}
                     options={[
                       { id: '', label: 'Select hotel', value: '' },
-                      ...hotels.map((hotel) => ({
-                        id: hotel.id,
-                        label: `${hotel.hotel_name} ${hotel.is_partner ? '⭐' : ''}`,
-                        value: hotel.id.toString()
-                      }))
+                      ...hotels.map((hotel) => {
+                        const selectedNationalParks = quoteData.selectedParks?.map(park => park.nationalParkName) || [];
+                        const isInSelectedPark = hotel.national_park_name && selectedNationalParks.includes(hotel.national_park_name);
+                        
+                        let label = hotel.hotel_name;
+                        if (isInSelectedPark) {
+                          label += ' 🏞️'; // National park indicator
+                        }
+                        if (hotel.is_partner) {
+                          label += ' ⭐'; // Partner indicator
+                        }
+                        
+                        return {
+                          id: hotel.id,
+                          label: label,
+                          value: hotel.id.toString()
+                        };
+                      })
                     ]}
                     placeholder="Choose hotel"
                     required
@@ -562,34 +625,52 @@ export function AccommodationStep({ quoteData, updateQuoteData, errors, setError
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {quoteData.selectedHotels.map((hotel) => (
-                <div key={hotel.id} className="border rounded-lg p-4">
-                  <div className="flex justify-between items-start mb-3">
-                    <div>
-                      <h3 className="font-medium">{hotel.hotelName}</h3>
-                      <div className="flex gap-2 mt-1">
-                        <Badge variant="outline" className="text-xs">
-                          {hotel.roomType}
-                        </Badge>
-                        <Badge variant="outline" className="text-xs">
-                          {hotel.checkIn} - {hotel.checkOut}
-                        </Badge>
-                        <Badge variant="outline" className="text-xs">
-                          {hotel.currency}
-                        </Badge>
+              {quoteData.selectedHotels.map((hotel) => {
+                // Find the hotel data to check if it's in a selected national park
+                const hotelData = hotels.find(h => h.id === hotel.hotelId);
+                const selectedNationalParks = quoteData.selectedParks?.map(park => park.nationalParkName) || [];
+                const isInSelectedPark = hotelData?.national_park_name && selectedNationalParks.includes(hotelData.national_park_name);
+                
+                return (
+                  <div key={hotel.id} className="border rounded-lg p-4">
+                    <div className="flex justify-between items-start mb-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-medium">{hotel.hotelName}</h3>
+                          {isInSelectedPark && (
+                            <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
+                              🏞️ In Selected Park
+                            </Badge>
+                          )}
+                          {hotelData?.is_partner && (
+                            <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-700 border-yellow-200">
+                              ⭐ Partner Hotel
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex gap-2 mt-1">
+                          <Badge variant="outline" className="text-xs">
+                            {hotel.roomType}
+                          </Badge>
+                          <Badge variant="outline" className="text-xs">
+                            {hotel.checkIn} - {hotel.checkOut}
+                          </Badge>
+                          <Badge variant="outline" className="text-xs">
+                            {hotel.currency}
+                          </Badge>
+                        </div>
+                        <div className="mt-2">
+                          <p className="text-sm font-semibold text-green-600">
+                            Total Price: {hotel.currency} {hotel.price.toLocaleString()}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {hotel.currency} {hotel.nights > 0 && hotel.pax > 0 
+                              ? (hotel.price / (hotel.nights * hotel.pax)).toFixed(2)
+                              : '0.00'
+                            } per person per night
+                          </p>
+                        </div>
                       </div>
-                      <div className="mt-2">
-                        <p className="text-sm font-semibold text-green-600">
-                          Total Price: {hotel.currency} {hotel.price.toLocaleString()}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {hotel.currency} {hotel.nights > 0 && hotel.pax > 0 
-                            ? (hotel.price / (hotel.nights * hotel.pax)).toFixed(2)
-                            : '0.00'
-                          } per person per night
-                        </p>
-                      </div>
-                    </div>
                     <Button
                       variant="ghost"
                       size="sm"
@@ -683,7 +764,8 @@ export function AccommodationStep({ quoteData, updateQuoteData, errors, setError
                     </div>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </CardContent>
         </Card>
